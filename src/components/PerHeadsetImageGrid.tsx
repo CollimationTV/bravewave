@@ -170,7 +170,7 @@ export const PerHeadsetImageGrid = ({
     }
   }, [mentalCommand, images, headsetSelections, pushProgress]);
 
-  // Monitor push progress and lock selection after 3 seconds
+  // Monitor push progress and lock selection after 5 seconds
   useEffect(() => {
     if (pushProgress.size === 0) return;
 
@@ -181,8 +181,8 @@ export const PerHeadsetImageGrid = ({
 
       pushProgress.forEach((progress, headsetId) => {
         const duration = now - progress.startTime;
-        if (duration >= 3000) {
-          // 3 seconds reached - lock selection
+        if (duration >= 5000) {
+          // 5 seconds reached - lock selection
           const currentSelection = headsetSelections.get(headsetId);
           if (currentSelection && currentSelection.imageId === null) {
             newSelections.set(headsetId, {
@@ -255,7 +255,7 @@ export const PerHeadsetImageGrid = ({
         const progress = pushProgress.get(hId);
         if (progress && progress.imageId === imageId) {
           const duration = Date.now() - progress.startTime;
-          pushProgressValue = Math.min(duration / 3000, 1); // 0 to 1 over 3 seconds
+          pushProgressValue = Math.min(duration / 5000, 1); // 0 to 1 over 5 seconds
         }
       }
     });
@@ -306,7 +306,7 @@ export const PerHeadsetImageGrid = ({
               <div className="flex items-center gap-2">
                 <Focus className="h-5 w-5 text-primary" />
                 <span className="text-sm font-mono">
-                  Tilt head UP/DOWN or LEFT/RIGHT to navigate • Hold <span className="text-primary font-bold">PUSH</span> for 3s to select
+                  Tilt head UP/DOWN or LEFT/RIGHT to navigate • Hold <span className="text-primary font-bold">PUSH</span> for 5s to select
                 </span>
               </div>
               <div className="h-4 w-px bg-border" />
