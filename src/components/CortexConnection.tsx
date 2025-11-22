@@ -22,7 +22,11 @@ export const CortexConnection = ({ onMentalCommand }: CortexConnectionProps) => 
   const [cortexClient, setCortexClient] = useState<CortexClient | null>(null);
 
   const handleConnect = async () => {
-    if (!clientId || !clientSecret) {
+    // Trim credentials to remove any whitespace
+    const trimmedClientId = clientId.trim();
+    const trimmedClientSecret = clientSecret.trim();
+    
+    if (!trimmedClientId || !trimmedClientSecret) {
       toast({
         title: "Missing Credentials",
         description: "Please enter your Emotiv Client ID and Client Secret",
@@ -31,13 +35,16 @@ export const CortexConnection = ({ onMentalCommand }: CortexConnectionProps) => 
       return;
     }
 
+    console.log('🔑 Connecting with Client ID:', trimmedClientId);
+    console.log('🔑 Client Secret length:', trimmedClientSecret.length, 'characters');
+
     setStatus('connecting');
     setError(null);
 
     try {
       const client = new CortexClient({
-        clientId,
-        clientSecret,
+        clientId: trimmedClientId,
+        clientSecret: trimmedClientSecret,
       });
 
       // Set up event handlers
@@ -174,7 +181,7 @@ export const CortexConnection = ({ onMentalCommand }: CortexConnectionProps) => 
               id="clientId"
               type="text"
               value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
+              onChange={(e) => setClientId(e.target.value.trim())}
               placeholder="Enter your Emotiv Client ID"
               className="mt-2 font-mono"
             />
@@ -188,7 +195,7 @@ export const CortexConnection = ({ onMentalCommand }: CortexConnectionProps) => 
               id="clientSecret"
               type="password"
               value={clientSecret}
-              onChange={(e) => setClientSecret(e.target.value)}
+              onChange={(e) => setClientSecret(e.target.value.trim())}
               placeholder="Enter your Emotiv Client Secret"
               className="mt-2 font-mono"
             />
