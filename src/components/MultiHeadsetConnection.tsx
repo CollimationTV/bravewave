@@ -11,9 +11,10 @@ import { Badge } from "@/components/ui/badge";
 
 interface MultiHeadsetConnectionProps {
   onMentalCommand?: (command: MentalCommandEvent) => void;
+  onHeadsetsChange?: (headsetIds: string[]) => void;
 }
 
-export const MultiHeadsetConnection = ({ onMentalCommand }: MultiHeadsetConnectionProps) => {
+export const MultiHeadsetConnection = ({ onMentalCommand, onHeadsetsChange }: MultiHeadsetConnectionProps) => {
   const { toast } = useToast();
   const [clientId, setClientId] = useState(() => localStorage.getItem("emotiv_client_id") || "");
   const [clientSecret, setClientSecret] = useState(() => localStorage.getItem("emotiv_client_secret") || "");
@@ -141,6 +142,9 @@ export const MultiHeadsetConnection = ({ onMentalCommand }: MultiHeadsetConnecti
         title: "Headset Connected",
         description: `Successfully connected to headset ${headsetId.substring(0, 8)}...`,
       });
+      
+      // Update connected headsets list
+      updateConnectedHeadsets();
     } catch (err) {
       console.error(`Failed to connect headset ${headsetId}:`, err);
       toast({
@@ -150,6 +154,18 @@ export const MultiHeadsetConnection = ({ onMentalCommand }: MultiHeadsetConnecti
       });
     }
   };
+
+  const updateConnectedHeadsets = () => {
+    const connectedIds = Array.from(headsetStatuses.entries())
+      .filter(([_, status]) => status === 'ready')
+      .map(([id, _]) => id);
+    onHeadsetsChange?.(connectedIds);
+  };
+
+  // Update connected headsets when statuses change
+  useEffect(() => {
+    updateConnectedHeadsets();
+  }, [headsetStatuses]);
 
   const handleDisconnectHeadset = async (headsetId: string) => {
     if (!cortexClient) return;
