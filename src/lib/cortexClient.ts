@@ -172,7 +172,7 @@ export class CortexClient {
       clientId: this.config.clientId,
       clientSecret: this.config.clientSecret,
       license: this.config.licenseId || '',
-      debit: 0 // Set to number of sessions you want to debit from license
+      debit: 5 // Debit 5 sessions from your Emotiv license
     });
     
     this.authToken = result.cortexToken;
