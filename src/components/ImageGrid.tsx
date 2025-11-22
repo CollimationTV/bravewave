@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Brain, Check } from "lucide-react";
+import { MentalCommandEvent } from "@/lib/cortexClient";
 
 // Generate 30 placeholder images
 const images = Array.from({ length: 30 }, (_, i) => ({
@@ -8,9 +9,53 @@ const images = Array.from({ length: 30 }, (_, i) => ({
   url: `https://images.unsplash.com/photo-${1500000000000 + i * 10000000}?w=400&h=400&fit=crop`,
 }));
 
-export const ImageGrid = () => {
+interface ImageGridProps {
+  mentalCommand?: MentalCommandEvent | null;
+}
+
+export const ImageGrid = ({ mentalCommand }: ImageGridProps) => {
   const [selectedImages, setSelectedImages] = useState<number[]>([]);
   const [activeImage, setActiveImage] = useState<number | null>(null);
+  const [focusedImageIndex, setFocusedImageIndex] = useState<number>(0);
+
+  // Handle mental commands to navigate and select
+  useEffect(() => {
+    if (!mentalCommand) return;
+
+    const { com, pow } = mentalCommand;
+    
+    // Only respond to commands with sufficient power (>30%)
+    if (pow < 0.3) return;
+
+    switch (com) {
+      case 'push':
+      case 'pull':
+        // Select/deselect the currently focused image
+        handleImageSelect(images[focusedImageIndex].id);
+        break;
+      case 'left':
+        // Move focus left
+        setFocusedImageIndex(prev => Math.max(0, prev - 1));
+        break;
+      case 'right':
+        // Move focus right
+        setFocusedImageIndex(prev => Math.min(images.length - 1, prev + 1));
+        break;
+      case 'lift':
+        // Move focus up
+        setFocusedImageIndex(prev => Math.max(0, prev - 6));
+        break;
+      case 'drop':
+        // Move focus down
+        setFocusedImageIndex(prev => Math.min(images.length - 1, prev + 6));
+        break;
+    }
+  }, [mentalCommand]);
+
+  // Set active image based on focused index
+  useEffect(() => {
+    setActiveImage(images[focusedImageIndex].id);
+  }, [focusedImageIndex]);
 
   const handleImageSelect = (id: number) => {
     setSelectedImages(prev => 
@@ -30,11 +75,20 @@ export const ImageGrid = () => {
           </p>
         </div>
 
-        <div className="mb-8 flex items-center justify-center gap-4 p-4 border border-primary/30 bg-card/50 rounded-lg max-w-md mx-auto">
+        <div className="mb-8 flex items-center justify-center gap-4 p-4 border border-primary/30 bg-card/50 rounded-lg max-w-2xl mx-auto">
           <Brain className="h-5 w-5 text-primary animate-pulse-glow" />
           <div className="text-sm">
-            <span className="text-muted-foreground">Mental Command:</span>{" "}
-            <span className="text-primary font-bold">FOCUS</span>
+            <span className="text-muted-foreground">Command:</span>{" "}
+            <span className="text-primary font-bold font-mono">
+              {mentalCommand ? mentalCommand.com.toUpperCase() : 'NONE'}
+            </span>
+          </div>
+          <div className="h-8 w-px bg-border" />
+          <div className="text-sm">
+            <span className="text-muted-foreground">Power:</span>{" "}
+            <span className="text-accent font-bold">
+              {mentalCommand ? `${(mentalCommand.pow * 100).toFixed(0)}%` : '0%'}
+            </span>
           </div>
           <div className="h-8 w-px bg-border" />
           <div className="text-sm">
