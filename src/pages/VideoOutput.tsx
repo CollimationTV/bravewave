@@ -29,20 +29,38 @@ const VideoOutput = () => {
 
     console.log("🎬 Starting Sora video generation with metadata:", metadata);
     
-    // Call the Sora edge function
+    // Call the Sora edge function with extended timeout
     const generateVideo = async () => {
       try {
-        const { data, error } = await supabase.functions.invoke('generate-sora-video', {
-          body: { metadata }
-        });
+        // Use direct fetch with extended timeout (6 minutes) instead of supabase.functions.invoke
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 360000); // 6 minutes
 
-        if (error) {
-          console.error("❌ Sora generation error:", error);
-          setError(error.message || "Failed to generate video");
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-sora-video`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: JSON.stringify({ metadata }),
+            signal: controller.signal,
+          }
+        );
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error("❌ Sora generation error:", response.status, errorData);
+          setError(errorData.error || `Failed to generate video (${response.status})`);
           setIsGenerating(false);
           return;
         }
 
+        const data = await response.json();
+        
         if (data?.videoUrl) {
           console.log("✅ Video generated:", data.videoUrl);
           setVideoUrl(data.videoUrl);
@@ -51,7 +69,11 @@ const VideoOutput = () => {
         }
       } catch (err) {
         console.error("❌ Unexpected error:", err);
-        setError(err instanceof Error ? err.message : "Unknown error occurred");
+        if (err instanceof Error && err.name === 'AbortError') {
+          setError("Video generation timed out. The process may still be running - please try again in a moment.");
+        } else {
+          setError(err instanceof Error ? err.message : "Unknown error occurred");
+        }
       } finally {
         setIsGenerating(false);
       }
@@ -97,7 +119,10 @@ const VideoOutput = () => {
                 Processing metadata tags...
               </div>
               <div className="text-sm text-muted-foreground animate-pulse">
-                This may take a few moments
+                This typically takes 2-5 minutes
+              </div>
+              <div className="text-xs text-muted-foreground/70 mt-4">
+                Generating cinematic video with Sora AI
               </div>
             </div>
           </div>
