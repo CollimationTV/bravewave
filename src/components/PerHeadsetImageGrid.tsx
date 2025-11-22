@@ -1,0 +1,310 @@
+import { useState, useEffect } from "react";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { CheckCircle2, Focus, Sparkles } from "lucide-react";
+import { MentalCommandEvent } from "@/lib/multiHeadsetCortexClient";
+import { ImageData } from "@/data/imageData";
+import { ParticleDissolve } from "./ParticleDissolve";
+
+interface HeadsetSelection {
+  headsetId: string;
+  imageId: number | null;
+  focusedIndex: number;
+}
+
+interface PerHeadsetImageGridProps {
+  images: ImageData[];
+  mentalCommand?: MentalCommandEvent | null;
+  connectedHeadsets: string[];
+  onAllSelected: (selections: Map<string, number>) => void;
+  title: string;
+  description: string;
+}
+
+export const PerHeadsetImageGrid = ({
+  images,
+  mentalCommand,
+  connectedHeadsets,
+  onAllSelected,
+  title,
+  description
+}: PerHeadsetImageGridProps) => {
+  const [headsetSelections, setHeadsetSelections] = useState<Map<string, HeadsetSelection>>(new Map());
+  const [triggerParticle, setTriggerParticle] = useState<number | null>(null);
+  const [allSelectionsComplete, setAllSelectionsComplete] = useState(false);
+
+  // Initialize headset selections
+  useEffect(() => {
+    const newSelections = new Map<string, HeadsetSelection>();
+    connectedHeadsets.forEach(headsetId => {
+      if (!headsetSelections.has(headsetId)) {
+        newSelections.set(headsetId, {
+          headsetId,
+          imageId: null,
+          focusedIndex: 0
+        });
+      } else {
+        newSelections.set(headsetId, headsetSelections.get(headsetId)!);
+      }
+    });
+    setHeadsetSelections(newSelections);
+  }, [connectedHeadsets]);
+
+  // Handle mental commands
+  useEffect(() => {
+    if (!mentalCommand) return;
+
+    const { com, headsetId } = mentalCommand;
+    const currentSelection = headsetSelections.get(headsetId);
+    if (!currentSelection) return;
+
+    const newSelections = new Map(headsetSelections);
+    const selection = { ...currentSelection };
+
+    switch (com) {
+      case 'right':
+        selection.focusedIndex = (selection.focusedIndex + 1) % images.length;
+        break;
+      case 'left':
+        selection.focusedIndex = (selection.focusedIndex - 1 + images.length) % images.length;
+        break;
+      case 'push':
+      case 'pull':
+        if (selection.imageId === null) {
+          selection.imageId = images[selection.focusedIndex].id;
+          setTriggerParticle(images[selection.focusedIndex].id);
+        }
+        break;
+      case 'lift':
+        selection.focusedIndex = Math.max(0, selection.focusedIndex - 3);
+        break;
+      case 'drop':
+        selection.focusedIndex = Math.min(images.length - 1, selection.focusedIndex + 3);
+        break;
+    }
+
+    newSelections.set(headsetId, selection);
+    setHeadsetSelections(newSelections);
+  }, [mentalCommand, images]);
+
+  // Check if all selections are complete
+  useEffect(() => {
+    if (connectedHeadsets.length === 0) return;
+
+    const allSelected = connectedHeadsets.every(headsetId => {
+      const selection = headsetSelections.get(headsetId);
+      return selection && selection.imageId !== null;
+    });
+
+    if (allSelected && !allSelectionsComplete) {
+      setAllSelectionsComplete(true);
+      
+      // Build selections map
+      const selectionsMap = new Map<string, number>();
+      connectedHeadsets.forEach(headsetId => {
+        const selection = headsetSelections.get(headsetId);
+        if (selection && selection.imageId !== null) {
+          selectionsMap.set(headsetId, selection.imageId);
+        }
+      });
+
+      // Delay navigation for cinematic effect
+      setTimeout(() => {
+        onAllSelected(selectionsMap);
+      }, 1500);
+    }
+  }, [headsetSelections, connectedHeadsets, allSelectionsComplete, onAllSelected]);
+
+  const getImageStatus = (imageId: number): { isSelected: boolean; isFocused: boolean; headsetId?: string } => {
+    let isSelected = false;
+    let isFocused = false;
+    let headsetId: string | undefined;
+
+    headsetSelections.forEach((selection, hId) => {
+      if (selection.imageId === imageId) {
+        isSelected = true;
+        headsetId = hId;
+      }
+      if (images[selection.focusedIndex]?.id === imageId) {
+        isFocused = true;
+      }
+    });
+
+    return { isSelected, isFocused, headsetId };
+  };
+
+  const getHeadsetColor = (headsetId: string): string => {
+    const colors = [
+      'hsl(var(--primary))',
+      'hsl(142, 76%, 36%)',
+      'hsl(217, 91%, 60%)',
+      'hsl(280, 67%, 55%)',
+      'hsl(25, 95%, 53%)',
+    ];
+    const index = connectedHeadsets.indexOf(headsetId) % colors.length;
+    return colors[index];
+  };
+
+  const selectedCount = Array.from(headsetSelections.values()).filter(s => s.imageId !== null).length;
+
+  return (
+    <section className="py-12 px-6 bg-background/50 relative overflow-hidden">
+      {/* Cinematic overlay when all selections complete */}
+      {allSelectionsComplete && (
+        <div className="fixed inset-0 bg-background/95 backdrop-blur-xl z-40 animate-fade-in">
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center space-y-6 animate-scale-in">
+              <Sparkles className="h-16 w-16 text-primary mx-auto animate-pulse-glow" />
+              <h2 className="text-4xl font-bold uppercase tracking-wider" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                All Selections Complete
+              </h2>
+              <p className="text-lg text-muted-foreground">Proceeding to next level...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="container mx-auto max-w-6xl relative z-10">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold uppercase tracking-wider mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+            {title}
+          </h2>
+          <p className="text-muted-foreground mb-4">{description}</p>
+          
+          <div className="flex items-center justify-center gap-6 p-4 rounded-lg border border-primary/30 bg-card/50 backdrop-blur-sm">
+            <div className="flex items-center gap-2">
+              <Focus className="h-5 w-5 text-primary" />
+              <span className="text-sm font-mono">
+                Command: <span className="text-primary font-bold">{mentalCommand?.com || 'NEUTRAL'}</span>
+              </span>
+            </div>
+            <div className="h-4 w-px bg-border" />
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-primary" />
+              <span className="text-sm font-mono">
+                Selected: <span className="text-primary font-bold">{selectedCount}/{connectedHeadsets.length}</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Show connected headsets */}
+          {connectedHeadsets.length > 0 && (
+            <div className="flex items-center justify-center gap-3 mt-4 flex-wrap">
+              {connectedHeadsets.map(headsetId => {
+                const selection = headsetSelections.get(headsetId);
+                const hasSelected = selection?.imageId !== null;
+                return (
+                  <Badge
+                    key={headsetId}
+                    variant={hasSelected ? "default" : "outline"}
+                    className="font-mono text-xs"
+                    style={{
+                      borderColor: getHeadsetColor(headsetId),
+                      backgroundColor: hasSelected ? getHeadsetColor(headsetId) : 'transparent',
+                    }}
+                  >
+                    {headsetId.substring(0, 8)}... {hasSelected && '✓'}
+                  </Badge>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {images.map((image, index) => {
+            const { isSelected, isFocused, headsetId } = getImageStatus(image.id);
+            const headsetColor = headsetId ? getHeadsetColor(headsetId) : 'hsl(var(--primary))';
+
+            return (
+              <Card
+                key={image.id}
+                className={`
+                  relative overflow-hidden cursor-pointer transition-all duration-500
+                  ${isSelected ? 'border-2 shadow-2xl scale-105' : 'border-border'}
+                  ${isFocused && !isSelected ? 'border-accent border-2 shadow-lg shadow-accent/20' : ''}
+                  hover:scale-105 hover:shadow-xl
+                `}
+                style={{
+                  borderColor: isSelected ? headsetColor : undefined,
+                  boxShadow: isSelected ? `0 20px 40px -15px ${headsetColor}40` : undefined,
+                }}
+              >
+                <div className="aspect-video relative">
+                  <img
+                    src={image.url}
+                    alt={image.title || `Image ${image.id}`}
+                    className={`w-full h-full object-cover transition-all duration-700 ${
+                      isSelected ? 'scale-110 brightness-110' : ''
+                    }`}
+                  />
+                  
+                  {/* Particle dissolve effect */}
+                  {triggerParticle === image.id && (
+                    <ParticleDissolve
+                      trigger={true}
+                      onComplete={() => setTriggerParticle(null)}
+                    />
+                  )}
+                  
+                  {/* Cinematic overlay on selection */}
+                  {isSelected && (
+                    <>
+                      <div 
+                        className="absolute inset-0 animate-fade-in"
+                        style={{
+                          background: `radial-gradient(circle at center, ${headsetColor}20 0%, transparent 70%)`,
+                        }}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center animate-scale-in">
+                        <div className="relative">
+                          <div 
+                            className="absolute inset-0 blur-2xl"
+                            style={{ backgroundColor: headsetColor, opacity: 0.3 }}
+                          />
+                          <CheckCircle2 
+                            className="h-16 w-16 relative drop-shadow-2xl animate-pulse-glow" 
+                            style={{ color: headsetColor }}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  
+                  {isFocused && !isSelected && (
+                    <div className="absolute top-2 right-2 animate-fade-in">
+                      <Badge variant="secondary" className="bg-accent text-accent-foreground font-bold backdrop-blur-sm">
+                        FOCUSED
+                      </Badge>
+                    </div>
+                  )}
+
+                  {isSelected && headsetId && (
+                    <div className="absolute top-2 left-2 animate-fade-in">
+                      <Badge 
+                        className="font-bold backdrop-blur-sm border-2"
+                        style={{
+                          backgroundColor: `${headsetColor}20`,
+                          borderColor: headsetColor,
+                          color: headsetColor,
+                        }}
+                      >
+                        ✓ {headsetId.substring(0, 8)}...
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+
+                {image.title && (
+                  <div className="p-3 bg-card/80 backdrop-blur-sm">
+                    <p className="text-sm font-semibold text-center">{image.title}</p>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+};

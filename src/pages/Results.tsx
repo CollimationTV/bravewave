@@ -8,10 +8,26 @@ import { level1Images, level2Images } from "@/data/imageData";
 const Results = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { level1Selections, level2Selections } = location.state || { level1Selections: [], level2Selections: [] };
+  const { level1Selections, level2Selections, connectedHeadsets } = location.state || { 
+    level1Selections: new Map(), 
+    level2Selections: new Map(),
+    connectedHeadsets: []
+  };
 
-  const selectedLevel1Images = level1Images.filter(img => level1Selections.includes(img.id));
-  const selectedLevel2Images = level2Images.filter(img => level2Selections.includes(img.id));
+  const getImageById = (id: number) => {
+    return [...level1Images, ...level2Images].find(img => img.id === id);
+  };
+
+  const getHeadsetColor = (index: number): string => {
+    const colors = [
+      'hsl(var(--primary))',
+      'hsl(142, 76%, 36%)',
+      'hsl(217, 91%, 60%)',
+      'hsl(280, 67%, 55%)',
+      'hsl(25, 95%, 53%)',
+    ];
+    return colors[index % colors.length];
+  };
 
   const handleStartOver = () => {
     navigate("/");
@@ -31,7 +47,7 @@ const Results = () => {
               Selection Complete
             </h1>
             <p className="text-lg text-muted-foreground mb-8">
-              You've successfully selected {level1Selections.length + level2Selections.length} images across both levels
+              {connectedHeadsets.length} user{connectedHeadsets.length !== 1 ? 's' : ''} completed selections across both levels
             </p>
             
             <div className="flex items-center justify-center gap-4">
@@ -51,6 +67,7 @@ const Results = () => {
           </div>
 
           <div className="space-y-12">
+            {/* Level 1 Selections by Headset */}
             <div>
               <h2 className="text-2xl font-bold uppercase tracking-wider mb-6 flex items-center gap-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                 <span className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground font-bold">
@@ -59,23 +76,42 @@ const Results = () => {
                 Level 1 Selections
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {selectedLevel1Images.map((image) => (
-                  <Card key={image.id} className="overflow-hidden border-primary/30">
-                    <div className="aspect-video relative">
-                      <img
-                        src={image.url}
-                        alt={image.title}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="p-4 bg-card">
-                      <p className="text-sm font-semibold text-center">{image.title}</p>
-                    </div>
-                  </Card>
-                ))}
+                {Array.from(level1Selections.entries()).map(([headsetId, imageId], index) => {
+                  const image = getImageById(imageId);
+                  if (!image) return null;
+                  const color = getHeadsetColor(index);
+                  
+                  return (
+                    <Card key={headsetId} className="overflow-hidden border-2" style={{ borderColor: color }}>
+                      <div className="aspect-video relative">
+                        <img
+                          src={image.url}
+                          alt={image.title}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute top-2 left-2">
+                          <div 
+                            className="px-3 py-1 rounded-full backdrop-blur-sm border-2 font-mono text-xs font-bold"
+                            style={{
+                              backgroundColor: `${color}20`,
+                              borderColor: color,
+                              color: color,
+                            }}
+                          >
+                            {headsetId.substring(0, 8)}...
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-4 bg-card">
+                        <p className="text-sm font-semibold text-center">{image.title}</p>
+                      </div>
+                    </Card>
+                  );
+                })}
               </div>
             </div>
 
+            {/* Level 2 Selections by Headset */}
             <div>
               <h2 className="text-2xl font-bold uppercase tracking-wider mb-6 flex items-center gap-3" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                 <span className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground font-bold">
@@ -84,20 +120,38 @@ const Results = () => {
                 Level 2 Selections
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {selectedLevel2Images.map((image) => (
-                  <Card key={image.id} className="overflow-hidden border-primary/30">
-                    <div className="aspect-video relative">
-                      <img
-                        src={image.url}
-                        alt={image.title}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="p-4 bg-card">
-                      <p className="text-sm font-semibold text-center">{image.title}</p>
-                    </div>
-                  </Card>
-                ))}
+                {Array.from(level2Selections.entries()).map(([headsetId, imageId], index) => {
+                  const image = getImageById(imageId);
+                  if (!image) return null;
+                  const color = getHeadsetColor(index);
+                  
+                  return (
+                    <Card key={headsetId} className="overflow-hidden border-2" style={{ borderColor: color }}>
+                      <div className="aspect-video relative">
+                        <img
+                          src={image.url}
+                          alt={image.title}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute top-2 left-2">
+                          <div 
+                            className="px-3 py-1 rounded-full backdrop-blur-sm border-2 font-mono text-xs font-bold"
+                            style={{
+                              backgroundColor: `${color}20`,
+                              borderColor: color,
+                              color: color,
+                            }}
+                          >
+                            {headsetId.substring(0, 8)}...
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-4 bg-card">
+                        <p className="text-sm font-semibold text-center">{image.title}</p>
+                      </div>
+                    </Card>
+                  );
+                })}
               </div>
             </div>
           </div>
