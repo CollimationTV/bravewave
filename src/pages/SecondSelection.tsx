@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { PerHeadsetImageGrid } from "@/components/PerHeadsetImageGrid";
@@ -7,14 +7,11 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { level2Images } from "@/data/imageData";
 import { useToast } from "@/hooks/use-toast";
-import { Brain3D } from "@/components/Brain3D";
-import type { MentalCommandEvent } from "@/lib/multiHeadsetCortexClient";
 
 const SecondSelection = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [excitementLevel, setExcitementLevel] = useState(0);
   
   // Get state from first selection (reuse existing connection)
   const { 
@@ -23,14 +20,6 @@ const SecondSelection = () => {
     mentalCommand, 
     motionEvent 
   } = location.state || {};
-
-  // Track excitement from mental commands
-  useEffect(() => {
-    if (mentalCommand) {
-      const cmd = mentalCommand as MentalCommandEvent;
-      setExcitementLevel(cmd.pow || 0);
-    }
-  }, [mentalCommand]);
 
   useEffect(() => {
     if (!level1Selections || !connectedHeadsets) {
@@ -54,10 +43,7 @@ const SecondSelection = () => {
   };
 
   return (
-    <div className="min-h-screen relative">
-      {/* Animated Brain Background */}
-      <Brain3D excitement={excitementLevel} className="opacity-20 z-0" />
-      
+    <div className="min-h-screen">
       <Header />
       
       <div className="py-8 px-6 bg-gradient-to-b from-background to-background/50">

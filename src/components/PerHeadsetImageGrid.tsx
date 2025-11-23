@@ -37,21 +37,11 @@ export const PerHeadsetImageGrid = ({
   const [lastCommandReceived, setLastCommandReceived] = useState<{ com: string; pow: number; headsetId: string } | null>(null);
   const [pushFlash, setPushFlash] = useState(false);
   const [pushProgress, setPushProgress] = useState<Map<string, { startTime: number; imageId: number }>>(new Map());
-  const [pushArm, setPushArm] = useState<Map<string, { imageId: number; armStart: number }>>(new Map());
-  const [cursorPosition, setCursorPosition] = useState<Map<string, number>>(new Map()); // headsetId -> 0-1 normalized position
+  const [neutralState, setNeutralState] = useState<Map<string, boolean>>(new Map()); // Track if headset is in neutral zone
 
-  // Cursor and selection sensitivity constants
-  const CURSOR_MOVEMENT_SPEED = 0.00005;
-  const CURSOR_DEAD_ZONE = 0.15;
-  const CURSOR_MAX_STEP = 0.005;
-  const PUSH_POWER_THRESHOLD = 0.25;
-  const PUSH_ARM_TIME_MS = 500;
-  const PUSH_HOLD_TIME_MS = 5000;
-
-  // Initialize headset selections and cursor positions
+  // Initialize headset selections
   useEffect(() => {
     const newSelections = new Map<string, HeadsetSelection>();
-    const newCursorPositions = new Map<string, number>();
     connectedHeadsets.forEach(headsetId => {
       if (!headsetSelections.has(headsetId)) {
         newSelections.set(headsetId, {
@@ -59,80 +49,83 @@ export const PerHeadsetImageGrid = ({
           imageId: null,
           focusedIndex: 0
         });
-        newCursorPositions.set(headsetId, 0.0); // Start at first image
       } else {
         newSelections.set(headsetId, headsetSelections.get(headsetId)!);
-        if (!cursorPosition.has(headsetId)) {
-          newCursorPositions.set(headsetId, 0.0);
-        }
       }
     });
     setHeadsetSelections(newSelections);
-    if (newCursorPositions.size > 0) {
-      setCursorPosition(prev => new Map([...prev, ...newCursorPositions]));
-    }
   }, [connectedHeadsets]);
 
-  // Handle head turning for smooth cursor-like navigation
+  // Handle head turning (gyroscope) for DISCRETE tilt-step navigation
   useEffect(() => {
-    if (!motionEvent) {
-      console.log('⚠️ No motion event received');
-      return;
-    }
-    const { gyroY, headsetId } = motionEvent;
-    
-    console.log(`🎮 Motion: headset=${headsetId.substring(0,8)}, gyroY=${gyroY.toFixed(4)}`);
+    if (!motionEvent) return;
+    const { gyroX, gyroY, headsetId } = motionEvent;
     
     const currentSelection = headsetSelections.get(headsetId);
     if (!currentSelection || currentSelection.imageId !== null) return;
 
-    // FREEZE navigation if this headset is actively pushing (arming or holding)
-    if (pushArm.has(headsetId) || pushProgress.has(headsetId)) {
-      console.log(`🚫 Motion frozen - PUSH active for ${headsetId.substring(0,8)}`);
+    // FREEZE navigation if this headset is actively pushing
+    if (pushProgress.has(headsetId)) {
+      // Reset to neutral when frozen
+      setNeutralState(prev => new Map(prev).set(headsetId, true));
       return;
     }
 
-    // Get current cursor position (0-1 normalized)
-    const currentPosition = cursorPosition.get(headsetId) ?? 0.0;
+    // Thresholds for discrete tilt-step navigation
+    const NEUTRAL_ZONE = 0.15; // Dead zone - must be below this to be "neutral"
+    const TILT_THRESHOLD = 0.5; // Must exceed this to trigger a move
     
-    console.log(`📍 Current position: ${currentPosition.toFixed(3)}, gyroY: ${gyroY.toFixed(4)}, dead zone: ${CURSOR_DEAD_ZONE}`);
-    
-    // Only update if movement exceeds dead zone
-    if (Math.abs(gyroY) < CURSOR_DEAD_ZONE) {
-      console.log(`💤 gyroY ${gyroY.toFixed(4)} below dead zone ${CURSOR_DEAD_ZONE}`);
+    const isInNeutral = Math.abs(gyroX) < NEUTRAL_ZONE && Math.abs(gyroY) < NEUTRAL_ZONE;
+    const wasInNeutral = neutralState.get(headsetId) ?? true; // Default to neutral on first event
+
+    if (isInNeutral) {
+      // Update neutral state
+      if (!wasInNeutral) {
+        setNeutralState(prev => new Map(prev).set(headsetId, true));
+      }
+      return; // In neutral zone, no navigation
+    }
+
+    // NOT in neutral zone - check if we can navigate
+    if (!wasInNeutral) {
+      // Already moved, waiting for return to neutral
       return;
     }
-    
-    // Calculate delta and clamp to prevent large jumps
-    const rawDelta = gyroY * CURSOR_MOVEMENT_SPEED;
-    const clampedDelta = Math.max(-CURSOR_MAX_STEP, Math.min(CURSOR_MAX_STEP, rawDelta));
-    
-    // Calculate new position based on head pan (gyroY)
-    // Positive gyroY = head turned right = cursor moves right
-    // Negative gyroY = head turned left = cursor moves left
-    let newPosition = currentPosition + clampedDelta;
-    
-    // Clamp position to 0-1 range with wrapping (circular navigation)
-    if (newPosition >= 1) newPosition = newPosition - 1;
-    if (newPosition < 0) newPosition = 1 + newPosition;
-    
-    // Update cursor position
-    setCursorPosition(prev => new Map(prev).set(headsetId, newPosition));
-    
-    // Map cursor position to image index (0-1 -> 0-8 for 9 images)
-    const imageIndex = Math.floor(newPosition * images.length);
-    
-    // Update focused image if changed
-    if (imageIndex !== currentSelection.focusedIndex) {
-      console.log(`🎯 Headset ${headsetId} cursor moved to image ${imageIndex} (position: ${newPosition.toFixed(3)})`);
+
+    // Was in neutral, now tilted beyond threshold - execute ONE move
+    let newIndex = currentSelection.focusedIndex;
+    let moved = false;
+
+    // Determine direction based on strongest signal
+    if (Math.abs(gyroY) > TILT_THRESHOLD || Math.abs(gyroX) > TILT_THRESHOLD) {
+      if (Math.abs(gyroY) > Math.abs(gyroX)) {
+        // Horizontal navigation (left/right)
+        newIndex = gyroY > 0 
+          ? (currentSelection.focusedIndex + 1) % images.length
+          : (currentSelection.focusedIndex - 1 + images.length) % images.length;
+        moved = true;
+      } else {
+        // Vertical navigation (up/down)
+        newIndex = gyroX > 0
+          ? (currentSelection.focusedIndex + 3) % images.length
+          : (currentSelection.focusedIndex - 3 + images.length) % images.length;
+        moved = true;
+      }
+    }
+
+    if (moved) {
+      // Execute the move
       const newSelections = new Map(headsetSelections);
       newSelections.set(headsetId, {
         ...currentSelection,
-        focusedIndex: imageIndex
+        focusedIndex: newIndex
       });
       setHeadsetSelections(newSelections);
+      
+      // Mark as NOT neutral - must return to neutral before next move
+      setNeutralState(prev => new Map(prev).set(headsetId, false));
     }
-  }, [motionEvent, images.length, headsetSelections, pushProgress, cursorPosition]);
+  }, [motionEvent, images.length, headsetSelections, neutralState, pushProgress]);
 
   // Track all mental commands for visual feedback
   useEffect(() => {
@@ -152,7 +145,7 @@ export const PerHeadsetImageGrid = ({
     }
   }, [mentalCommand]);
 
-  // Handle PUSH command with two-stage detection (arm + hold)
+  // Handle PUSH command with 3-second hold requirement
   useEffect(() => {
     if (!mentalCommand) return;
 
@@ -163,47 +156,26 @@ export const PerHeadsetImageGrid = ({
 
     const focusedImageId = images[currentSelection.focusedIndex].id;
 
-    if (com === 'push' && pow >= PUSH_POWER_THRESHOLD) {
+    if (com === 'push' && pow > 0.1) {
+      // Start or continue push
       const now = Date.now();
-      const arm = pushArm.get(headsetId);
+      const existing = pushProgress.get(headsetId);
       
-      // Stage 1: Arming phase (0.5s)
-      if (!arm || arm.imageId !== focusedImageId) {
-        // Start new arm
-        setPushArm(prev => new Map(prev).set(headsetId, { imageId: focusedImageId, armStart: now }));
-        // Clear any existing hold progress
-        setPushProgress(prev => {
-          const next = new Map(prev);
-          next.delete(headsetId);
-          return next;
-        });
-      } else {
-        // Check if armed
-        const armDuration = now - arm.armStart;
-        if (armDuration >= PUSH_ARM_TIME_MS) {
-          // Stage 2: Armed! Start hold timer if not already started
-          const existing = pushProgress.get(headsetId);
-          if (!existing || existing.imageId !== focusedImageId) {
-            setPushProgress(prev => new Map(prev).set(headsetId, { startTime: now, imageId: focusedImageId }));
-          }
-        }
+      if (!existing || existing.imageId !== focusedImageId) {
+        // New push started
+        setPushProgress(prev => new Map(prev).set(headsetId, { startTime: now, imageId: focusedImageId }));
       }
     } else {
-      // Push released or below threshold - reset both arm and hold
-      setPushArm(prev => {
-        const next = new Map(prev);
-        next.delete(headsetId);
-        return next;
-      });
+      // Push released or neutral - reset progress
       setPushProgress(prev => {
         const next = new Map(prev);
         next.delete(headsetId);
         return next;
       });
     }
-  }, [mentalCommand, images, headsetSelections, pushArm, pushProgress, PUSH_POWER_THRESHOLD, PUSH_ARM_TIME_MS]);
+  }, [mentalCommand, images, headsetSelections, pushProgress]);
 
-  // Monitor push progress and lock selection after hold duration
+  // Monitor push progress and lock selection after 5 seconds
   useEffect(() => {
     if (pushProgress.size === 0) return;
 
@@ -214,8 +186,8 @@ export const PerHeadsetImageGrid = ({
 
       pushProgress.forEach((progress, headsetId) => {
         const duration = now - progress.startTime;
-        if (duration >= PUSH_HOLD_TIME_MS) {
-          // Hold time reached - lock selection
+        if (duration >= 5000) {
+          // 5 seconds reached - lock selection
           const currentSelection = headsetSelections.get(headsetId);
           if (currentSelection && currentSelection.imageId === null) {
             newSelections.set(headsetId, {
@@ -225,13 +197,8 @@ export const PerHeadsetImageGrid = ({
             setTriggerParticle(progress.imageId);
             changed = true;
           }
-          // Clear push progress and arm
+          // Clear push progress
           setPushProgress(prev => {
-            const next = new Map(prev);
-            next.delete(headsetId);
-            return next;
-          });
-          setPushArm(prev => {
             const next = new Map(prev);
             next.delete(headsetId);
             return next;
@@ -245,7 +212,7 @@ export const PerHeadsetImageGrid = ({
     }, 100);
 
     return () => clearInterval(interval);
-  }, [pushProgress, headsetSelections, PUSH_HOLD_TIME_MS]);
+  }, [pushProgress, headsetSelections]);
 
   // Check if all selections are complete
   useEffect(() => {
@@ -289,11 +256,11 @@ export const PerHeadsetImageGrid = ({
       if (images[selection.focusedIndex]?.id === imageId) {
         isFocused = true;
         
-        // Check push progress (only show during hold phase, not arming)
+        // Check push progress
         const progress = pushProgress.get(hId);
         if (progress && progress.imageId === imageId) {
           const duration = Date.now() - progress.startTime;
-          pushProgressValue = Math.min(duration / PUSH_HOLD_TIME_MS, 1); // 0 to 1 over hold duration
+          pushProgressValue = Math.min(duration / 5000, 1); // 0 to 1 over 5 seconds
         }
       }
     });
@@ -402,7 +369,7 @@ export const PerHeadsetImageGrid = ({
               <Card
                 key={image.id}
                 className={`
-                  relative overflow-hidden cursor-pointer
+                  relative overflow-hidden cursor-pointer transition-all duration-500
                   ${isSelected ? 'border-2 shadow-2xl' : 'border-border'}
                   ${isFocused && !isSelected ? 'border-2 shadow-lg' : ''}
                 `}
@@ -410,19 +377,17 @@ export const PerHeadsetImageGrid = ({
                   borderColor: isFocused || isSelected ? headsetColor : undefined,
                   boxShadow: isFocused || isSelected ? `0 20px 40px -15px ${headsetColor}40` : undefined,
                   transform: isFocused && !isSelected ? 'scale(1.05)' : 'scale(1)',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', // Smooth easing
                 }}
               >
                 <div className="aspect-video relative">
                   <img
                     src={image.url}
                     alt={image.title || `Image ${image.id}`}
-                    className={`w-full h-full object-cover`}
+                    className={`w-full h-full object-cover transition-all duration-700`}
                     style={{
                       opacity: pushProgressValue !== undefined ? 1 - pushProgressValue : 1,
                       filter: pushProgressValue !== undefined ? `blur(${pushProgressValue * 8}px)` : undefined,
                       transform: isFocused && !isSelected ? 'scale(1.1)' : 'scale(1)',
-                      transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)', // Smooth zoom
                     }}
                   />
                   

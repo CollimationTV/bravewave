@@ -7,7 +7,6 @@ import { excitementLevel2Images } from "@/data/excitementImages";
 import { getHeadsetColor } from "@/utils/headsetColors";
 import { getSoundtrackByScore } from "@/data/soundtracks";
 import type { MentalCommandEvent } from "@/lib/multiHeadsetCortexClient";
-import { Brain3D } from "@/components/Brain3D";
 
 const ExcitementLevel2 = () => {
   const location = useLocation();
@@ -93,14 +92,8 @@ const ExcitementLevel2 = () => {
     return 'hsl(25, 95%, 53%)';
   };
 
-  // Calculate average excitement for brain visualization
-  const averageExcitement = Array.from(excitementLevels.values()).reduce((sum, val) => sum + val, 0) / Math.max(excitementLevels.size, 1);
-
   return (
-    <div className="min-h-screen relative">
-      {/* Animated Brain Background */}
-      <Brain3D excitement={averageExcitement} className="opacity-20 z-0" />
-      
+    <div className="min-h-screen">
       <Header />
       
       <div className="py-12 px-6">
