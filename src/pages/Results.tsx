@@ -5,22 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ArrowLeft, Download, CheckCircle2 } from "lucide-react";
 import { level1Images, level2Images } from "@/data/imageData";
-import { useCortex } from "@/contexts/CortexContext";
 
 const Results = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { performanceMetrics, motionEvent } = useCortex();
-  const { level1Selections, level2Selections } = location.state || { 
+  const { level1Selections, level2Selections, connectedHeadsets } = location.state || { 
     level1Selections: new Map(), 
-    level2Selections: new Map()
+    level2Selections: new Map(),
+    connectedHeadsets: []
   };
-
-  // Get connected headsets from selections
-  const connectedHeadsets = Array.from(new Set([
-    ...Array.from(level1Selections.keys()),
-    ...Array.from(level2Selections.keys())
-  ]));
 
   const getImageById = (id: number) => {
     return [...level1Images, ...level2Images].find(img => img.id === id);
@@ -60,13 +53,13 @@ const Results = () => {
       // The actual generation happens on the server
       const videoJobId = `job_${Date.now()}`;
       
-      // Navigate to excitement level 3 (new artistic earth-forming level)
-      navigate("/excitement-level-3", { 
+      // Navigate to excitement level 1 while video generates
+      navigate("/excitement-level-1", { 
         state: { 
           metadata,
           videoJobId,
           connectedHeadsets,
-          performanceMetrics: location.state?.performanceMetrics,
+          mentalCommand: location.state?.mentalCommand,
           motionEvent: location.state?.motionEvent
         },
         replace: true 
