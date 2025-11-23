@@ -26,7 +26,7 @@ const ExcitementLevel3 = () => {
   const [lastPushReleaseTime, setLastPushReleaseTime] = useState<Map<string, number>>(new Map());
   
   // Selection constants (same as PerHeadsetImageGrid for consistency)
-  const PUSH_POWER_THRESHOLD = 0.35; // Less sensitive PUSH detection
+  const PUSH_POWER_THRESHOLD = 0.30; // Moderate PUSH sensitivity
   const PUSH_HOLD_TIME_MS = 8000; // 8 seconds hold time
   const AUTO_CYCLE_INTERVAL_MS = 6000; // 6 seconds between image advances
   const POST_PUSH_DELAY_MS = 3000; // 3 second cooldown after releasing push
