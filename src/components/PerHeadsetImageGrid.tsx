@@ -43,7 +43,7 @@ export const PerHeadsetImageGrid = ({
   const CURSOR_MOVEMENT_SPEED = 0.00005;
   const CURSOR_DEAD_ZONE = 0.15;
   const CURSOR_MAX_STEP = 0.005;
-  const PUSH_POWER_THRESHOLD = 0.2;
+  const PUSH_POWER_THRESHOLD = 0.45; // Require stronger PUSH effort
   const PUSH_HOLD_TIME_MS = 10000; // 10 seconds for slower selection
 
   // Initialize headset selections and cursor positions
@@ -131,6 +131,28 @@ export const PerHeadsetImageGrid = ({
       setHeadsetSelections(newSelections);
     }
   }, [motionEvent, images.length, headsetSelections, pushProgress, cursorPosition]);
+  
+  // Auto-cycle focused image for each headset at a slow, constant pace
+  useEffect(() => {
+    if (connectedHeadsets.length === 0 || images.length === 0) return;
+    const AUTO_CYCLE_INTERVAL_MS = 4000; // 4 seconds per image for slow cycling
+
+    const interval = setInterval(() => {
+      setHeadsetSelections(prev => {
+        const updated = new Map(prev);
+        connectedHeadsets.forEach(headsetId => {
+          const current = prev.get(headsetId);
+          const isPushing = pushProgress.has(headsetId);
+          if (!current || current.imageId !== null || isPushing) return; // skip completed or pushing
+          const nextIndex = (current.focusedIndex + 1) % images.length;
+          updated.set(headsetId, { ...current, focusedIndex: nextIndex });
+        });
+        return updated;
+      });
+    }, AUTO_CYCLE_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [connectedHeadsets, images.length, pushProgress]);
 
   // Track all mental commands for visual feedback
   useEffect(() => {
@@ -311,15 +333,15 @@ export const PerHeadsetImageGrid = ({
           <p className="text-muted-foreground mb-4">{description}</p>
           
           <div className="flex flex-col gap-3">
-            <div className={`flex items-center justify-center gap-6 p-4 rounded-lg border ${pushFlash ? 'border-primary bg-primary/20 scale-105' : 'border-primary/30 bg-card/50'} backdrop-blur-sm transition-all duration-300`}>
-              <div className="flex items-center gap-2">
-                <Focus className="h-5 w-5 text-primary" />
-                <span className="text-sm font-mono">
-                  Tilt head UP/DOWN or LEFT/RIGHT to navigate • Hold <span className="text-primary font-bold">PUSH</span> for 5s to select
-                </span>
-              </div>
-              <div className="h-4 w-px bg-border" />
-              <div className="flex items-center gap-2">
+          <div className={`flex items-center justify-center gap-6 p-4 rounded-lg border ${pushFlash ? 'border-primary bg-primary/20 scale-105' : 'border-primary/30 bg-card/50'} backdrop-blur-sm transition-all duration-300`}>
+             <div className="flex items-center gap-2">
+               <Focus className="h-5 w-5 text-primary" />
+               <span className="text-sm font-mono">
+                 Tilt head UP/DOWN or LEFT/RIGHT to navigate • Hold <span className="text-primary font-bold">PUSH</span> to select
+               </span>
+             </div>
+             <div className="h-4 w-px bg-border" />
+             <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-primary" />
                 <span className="text-sm font-mono">
                   Selected: <span className="text-primary font-bold">{selectedCount}/{connectedHeadsets.length}</span>
