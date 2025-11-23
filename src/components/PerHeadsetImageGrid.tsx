@@ -37,12 +37,12 @@ export const PerHeadsetImageGrid = ({
   const [lastCommandReceived, setLastCommandReceived] = useState<{ com: string; pow: number; headsetId: string } | null>(null);
   const [pushFlash, setPushFlash] = useState(false);
   const [pushProgress, setPushProgress] = useState<Map<string, { startTime: number; imageId: number }>>(new Map());
-  const [neutralState, setNeutralState] = useState<Map<string, boolean>>(new Map()); // Track if headset is in neutral zone
-  const [moveCooldown, setMoveCooldown] = useState<Map<string, number>>(new Map()); // Cooldown timer per headset
+  const [cursorPosition, setCursorPosition] = useState<Map<string, number>>(new Map()); // headsetId -> 0-1 normalized position
 
-  // Initialize headset selections
+  // Initialize headset selections and cursor positions
   useEffect(() => {
     const newSelections = new Map<string, HeadsetSelection>();
+    const newCursorPositions = new Map<string, number>();
     connectedHeadsets.forEach(headsetId => {
       if (!headsetSelections.has(headsetId)) {
         newSelections.set(headsetId, {
@@ -50,93 +50,69 @@ export const PerHeadsetImageGrid = ({
           imageId: null,
           focusedIndex: 0
         });
+        newCursorPositions.set(headsetId, 0.0); // Start at first image
       } else {
         newSelections.set(headsetId, headsetSelections.get(headsetId)!);
+        if (!cursorPosition.has(headsetId)) {
+          newCursorPositions.set(headsetId, 0.0);
+        }
       }
     });
     setHeadsetSelections(newSelections);
+    if (newCursorPositions.size > 0) {
+      setCursorPosition(prev => new Map([...prev, ...newCursorPositions]));
+    }
   }, [connectedHeadsets]);
 
-  // Handle head turning (gyroscope) for SMOOTH discrete tilt-step navigation
+  // Handle head turning for smooth cursor-like navigation
   useEffect(() => {
     if (!motionEvent) return;
-    const { gyroX, gyroY, headsetId } = motionEvent;
+    const { gyroY, headsetId } = motionEvent;
     
     const currentSelection = headsetSelections.get(headsetId);
     if (!currentSelection || currentSelection.imageId !== null) return;
 
     // FREEZE navigation if this headset is actively pushing
     if (pushProgress.has(headsetId)) {
-      // Reset to neutral when frozen
-      setNeutralState(prev => new Map(prev).set(headsetId, true));
       return;
     }
 
-    // Check cooldown - prevent rapid successive moves
-    const cooldownTime = moveCooldown.get(headsetId) || 0;
-    const now = Date.now();
-    if (now - cooldownTime < 400) { // 400ms cooldown between moves
-      return;
-    }
-
-    // Thresholds for smooth discrete tilt-step navigation
-    const NEUTRAL_ZONE = 0.25; // Larger dead zone to prevent accidental triggers
-    const TILT_THRESHOLD = 0.6; // Higher threshold for intentional movement
+    // Get current cursor position (0-1 normalized)
+    const currentPosition = cursorPosition.get(headsetId) ?? 0.0;
     
-    const isInNeutral = Math.abs(gyroX) < NEUTRAL_ZONE && Math.abs(gyroY) < NEUTRAL_ZONE;
-    const wasInNeutral = neutralState.get(headsetId) ?? true; // Default to neutral on first event
-
-    if (isInNeutral) {
-      // Update neutral state
-      if (!wasInNeutral) {
-        setNeutralState(prev => new Map(prev).set(headsetId, true));
-      }
-      return; // In neutral zone, no navigation
-    }
-
-    // NOT in neutral zone - check if we can navigate
-    if (!wasInNeutral) {
-      // Already moved, waiting for return to neutral
-      return;
-    }
-
-    // Was in neutral, now tilted beyond threshold - execute ONE move
-    let newIndex = currentSelection.focusedIndex;
-    let moved = false;
-
-    // Determine direction based on strongest signal
-    if (Math.abs(gyroY) > TILT_THRESHOLD || Math.abs(gyroX) > TILT_THRESHOLD) {
-      if (Math.abs(gyroY) > Math.abs(gyroX)) {
-        // Horizontal navigation (left/right)
-        newIndex = gyroY > 0 
-          ? (currentSelection.focusedIndex + 1) % images.length
-          : (currentSelection.focusedIndex - 1 + images.length) % images.length;
-        moved = true;
-      } else {
-        // Vertical navigation (up/down)
-        newIndex = gyroX > 0
-          ? (currentSelection.focusedIndex + 3) % images.length
-          : (currentSelection.focusedIndex - 3 + images.length) % images.length;
-        moved = true;
-      }
-    }
-
-    if (moved) {
-      // Execute the move
+    // Sensitivity settings for smooth cursor control
+    const MOVEMENT_SPEED = 0.012; // How fast cursor moves per gyro unit
+    const DEAD_ZONE = 0.1; // Ignore very small head movements
+    
+    // Only update if movement exceeds dead zone
+    if (Math.abs(gyroY) < DEAD_ZONE) return;
+    
+    // Calculate new position based on head pan (gyroY)
+    // Positive gyroY = head turned right = cursor moves right
+    // Negative gyroY = head turned left = cursor moves left
+    let newPosition = currentPosition + (gyroY * MOVEMENT_SPEED);
+    
+    // Clamp position to 0-1 range with wrapping (circular navigation)
+    if (newPosition >= 1) newPosition = newPosition - 1;
+    if (newPosition < 0) newPosition = 1 + newPosition;
+    
+    // Update cursor position
+    setCursorPosition(prev => new Map(prev).set(headsetId, newPosition));
+    
+    // Map cursor position to image index (0-1 -> 0-8 for 9 images)
+    const imageIndex = Math.floor(newPosition * images.length);
+    
+    // Update focused image if changed
+    if (imageIndex !== currentSelection.focusedIndex) {
+      console.log(`🎯 Headset ${headsetId} cursor moved to image ${imageIndex} (position: ${newPosition.toFixed(3)})`);
       const newSelections = new Map(headsetSelections);
       newSelections.set(headsetId, {
         ...currentSelection,
-        focusedIndex: newIndex
+        focusedIndex: imageIndex
       });
       setHeadsetSelections(newSelections);
-      
-      // Mark as NOT neutral - must return to neutral before next move
-      setNeutralState(prev => new Map(prev).set(headsetId, false));
-      
-      // Set cooldown to prevent rapid successive moves
-      setMoveCooldown(prev => new Map(prev).set(headsetId, now));
     }
-  }, [motionEvent, images.length, headsetSelections, neutralState, pushProgress, moveCooldown]);
+  }, [motionEvent, images.length, headsetSelections, pushProgress, cursorPosition]);
 
   // Track all mental commands for visual feedback
   useEffect(() => {

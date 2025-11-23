@@ -20,8 +20,7 @@ const ExcitementLevel3 = () => {
   const [selections, setSelections] = useState<Map<string, number>>(new Map());
   const [excitementDuration, setExcitementDuration] = useState<Map<string, { imageId: number; startTime: number; excitement: number }>>(new Map());
   const [focusedImages, setFocusedImages] = useState<Map<string, number>>(new Map()); // headsetId -> imageId
-  const [neutralState, setNeutralState] = useState<Map<string, boolean>>(new Map());
-  const [moveCooldown, setMoveCooldown] = useState<Map<string, number>>(new Map());
+  const [cursorPosition, setCursorPosition] = useState<Map<string, number>>(new Map()); // headsetId -> 0-1 normalized position
   
   const positions = generateSphericalLayout();
   
@@ -36,21 +35,24 @@ const ExcitementLevel3 = () => {
     if (motion) setMotionEvent(motion);
   }, [location.state]);
   
-  // Initialize focused images to center artwork (index 0)
+  // Initialize cursor positions and focused images
   useEffect(() => {
-    if (connectedHeadsets && connectedHeadsets.length > 0 && focusedImages.size === 0) {
+    if (connectedHeadsets && connectedHeadsets.length > 0 && cursorPosition.size === 0) {
+      const initialPositions = new Map();
       const initialFocus = new Map();
       connectedHeadsets.forEach((headsetId: string) => {
+        initialPositions.set(headsetId, 0.0); // Start at first artwork
         initialFocus.set(headsetId, excitementLevel3Images[0].id);
       });
+      setCursorPosition(initialPositions);
       setFocusedImages(initialFocus);
     }
-  }, [connectedHeadsets, focusedImages.size]);
+  }, [connectedHeadsets, cursorPosition.size]);
   
-  // Handle head motion for navigation between artworks
+  // Handle head motion for smooth cursor-like navigation
   useEffect(() => {
     if (!motionEvent) return;
-    const { gyroX, gyroY, headsetId } = motionEvent;
+    const { gyroY, headsetId } = motionEvent;
     
     // Skip if already selected
     if (selections.has(headsetId)) return;
@@ -60,57 +62,39 @@ const ExcitementLevel3 = () => {
       return;
     }
     
-    // Check cooldown
-    const cooldownTime = moveCooldown.get(headsetId) || 0;
-    const now = Date.now();
-    if (now - cooldownTime < 500) { // 500ms cooldown
-      return;
+    // Get current cursor position (0-1 normalized)
+    const currentPosition = cursorPosition.get(headsetId) ?? 0.0;
+    
+    // Sensitivity settings for smooth cursor control
+    const MOVEMENT_SPEED = 0.012; // How fast cursor moves per gyro unit
+    const DEAD_ZONE = 0.1; // Ignore very small head movements
+    
+    // Only update if movement exceeds dead zone
+    if (Math.abs(gyroY) < DEAD_ZONE) return;
+    
+    // Calculate new position based on head pan (gyroY)
+    // Positive gyroY = head turned right = cursor moves right
+    // Negative gyroY = head turned left = cursor moves left
+    let newPosition = currentPosition + (gyroY * MOVEMENT_SPEED);
+    
+    // Clamp position to 0-1 range with wrapping (circular navigation)
+    if (newPosition >= 1) newPosition = newPosition - 1;
+    if (newPosition < 0) newPosition = 1 + newPosition;
+    
+    // Update cursor position
+    setCursorPosition(prev => new Map(prev).set(headsetId, newPosition));
+    
+    // Map cursor position to artwork index (0-1 -> 0-14)
+    const artworkIndex = Math.floor(newPosition * excitementLevel3Images.length);
+    const focusedImageId = excitementLevel3Images[artworkIndex].id;
+    
+    // Update focused image if changed
+    const currentFocusedId = focusedImages.get(headsetId);
+    if (focusedImageId !== currentFocusedId) {
+      console.log(`🎯 Headset ${headsetId} cursor moved to artwork ${artworkIndex} (position: ${newPosition.toFixed(3)})`);
+      setFocusedImages(prev => new Map(prev).set(headsetId, focusedImageId));
     }
-    
-    // Higher thresholds for intentional movement
-    const NEUTRAL_ZONE = 0.3;
-    const TILT_THRESHOLD = 0.7;
-    
-    const isInNeutral = Math.abs(gyroX) < NEUTRAL_ZONE && Math.abs(gyroY) < NEUTRAL_ZONE;
-    const wasInNeutral = neutralState.get(headsetId) ?? true;
-    
-    if (!wasInNeutral && isInNeutral) {
-      setNeutralState(prev => new Map(prev).set(headsetId, true));
-    }
-    
-    if (wasInNeutral && !isInNeutral) {
-      const currentFocusedId = focusedImages.get(headsetId) || excitementLevel3Images[0].id;
-      const currentIndex = excitementLevel3Images.findIndex(img => img.id === currentFocusedId);
-      
-      let newIndex = currentIndex;
-      
-      // Navigate based on tilt direction (circular navigation)
-      if (Math.abs(gyroY) > TILT_THRESHOLD) {
-        if (gyroY > 0) {
-          // Right tilt - next artwork
-          newIndex = (currentIndex + 1) % excitementLevel3Images.length;
-        } else {
-          // Left tilt - previous artwork
-          newIndex = (currentIndex - 1 + excitementLevel3Images.length) % excitementLevel3Images.length;
-        }
-      } else if (Math.abs(gyroX) > TILT_THRESHOLD) {
-        if (gyroX > 0) {
-          // Forward tilt - jump forward
-          newIndex = (currentIndex + 3) % excitementLevel3Images.length;
-        } else {
-          // Backward tilt - jump backward
-          newIndex = (currentIndex - 3 + excitementLevel3Images.length) % excitementLevel3Images.length;
-        }
-      }
-      
-      if (newIndex !== currentIndex) {
-        console.log(`🎯 Headset ${headsetId} navigated to artwork ${newIndex}`);
-        setFocusedImages(prev => new Map(prev).set(headsetId, excitementLevel3Images[newIndex].id));
-        setNeutralState(prev => new Map(prev).set(headsetId, false));
-        setMoveCooldown(prev => new Map(prev).set(headsetId, now));
-      }
-    }
-  }, [motionEvent, focusedImages, selections, excitementDuration, neutralState, moveCooldown]);
+  }, [motionEvent, focusedImages, selections, excitementDuration, cursorPosition]);
   
   // Handle performance metrics for excitement-based selection
   useEffect(() => {

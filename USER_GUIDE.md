@@ -204,22 +204,22 @@ Hero Screen → Initialize Session → Enter Credentials → Connect to Cortex
 
 | Action | Method | Visual Feedback |
 |--------|--------|-----------------|
-| **Navigate** | Tilt head left/right | Focused image zooms & glows |
+| **Navigate** | Turn head left/right (smooth cursor) | Focused image zooms & glows |
 | **Select** | PUSH command (5 sec hold) | Progress bar + countdown timer |
 | **Confirm** | Complete 5-second hold | Particle burst effect |
 
 **👨‍🏫 Instructor Coaching:**
 
-💬 **"Remember: Return your head to center between tilts for discrete navigation."**
+💬 **"Turn your head smoothly to move through images like a cursor."**
 
 💬 **"Hold PUSH steady for the full 5 seconds - watch the progress bar."**
 
 💬 **"Your headset color shows which image you're focusing on."**
 
 **🔍 What to Watch For:**
-- ✅ Smooth head tilts (not rapid jerking)
+- ✅ Smooth head panning (like looking around naturally)
 - ✅ Steady PUSH holds (progress bar fills smoothly)
-- ✅ Participants return head to neutral between moves
+- ✅ Cursor moves continuously with head position
 - ⚠️ Motion freezes during PUSH hold (by design - prevents sliding)
 
 **✅ Success Indicator**: After each user selects, app auto-advances to Level 2
@@ -229,7 +229,7 @@ Hero Screen → Initialize Session → Enter Credentials → Connect to Cortex
 ### 🎯 Step 4: Image Selection - Level 2
 
 **Same mechanics as Level 1:**
-- 🧭 Navigate with head motion
+- 🧭 Navigate with smooth head panning (cursor-like)
 - 🖐️ Select with 5-second PUSH hold
 - 🎨 Each user selects one more image
 
@@ -237,6 +237,7 @@ Hero Screen → Initialize Session → Enter Credentials → Connect to Cortex
 - Users navigate independently - no interference
 - Each headset's color highlights their focused image
 - Progress bars are per-user (multiple can push simultaneously)
+- Head movements are natural and continuous
 
 **✅ Success Indicator**: After all selections complete, Sora video generation starts in background → automatic transition to Level 3
 
@@ -252,14 +253,14 @@ This is the **most artistic** level where 15 artworks form a rotating 3D sphere 
 
 | Action | Method | Visual Feedback |
 |--------|--------|-----------------|
-| **Navigate** | Tilt head (circular) | Focused artwork glows with your color |
+| **Navigate** | Turn head smoothly (cursor control) | Focused artwork glows with your color |
 | **Focus** | Look at artwork naturally | Orbital ring indicator moves |
 | **Select** | Sustain high excitement 5 sec | Countdown + progress ring |
 | **Confirm** | Automatic on threshold met | Artwork lifts & particle burst |
 
 **🧠 How Excitement Selection Works:**
 
-1. **Navigate**: Tilt head to move focus between 15 artworks
+1. **Navigate**: Pan head smoothly to move focus through 15 artworks (like a cursor)
 2. **Excite**: Feel genuine excitement/interest in focused artwork
 3. **Threshold**: Each artwork has an excitement requirement (55%-75%)
 4. **Hold**: Sustain excitement ≥ threshold for **5 seconds**
@@ -412,30 +413,24 @@ This is the **most artistic** level where 15 artworks form a rotating 3D sphere 
 ### ❌ Issue: Head Motion Navigation Not Working
 
 **🔍 Symptoms:**
-- Focus not moving when tilting head
+- Focus not moving when panning head
 - Navigation too sensitive / not sensitive enough
-- Jumps to wrong images
+- Cursor moves erratically
 
 **✅ Solutions:**
 
 | Problem | Solution | Technical Details |
 |---------|----------|-------------------|
-| **No movement** | Larger tilts required | Threshold: 0.7 gyro units |
-| **Too sensitive** | Return to neutral between tilts | Discrete step navigation |
+| **No movement** | Pan head left/right more | Dead zone: 0.1 gyro units |
+| **Too sensitive** | Reduce head movement speed | Movement speed: 0.012 per unit |
 | **Motion frozen** | Release PUSH hold | Motion disabled during selection |
-| **Wrong direction** | Check tilt direction | Left/right = adjacent, forward/back = jump 3 |
+| **Erratic movement** | Smoother head panning | Continuous tracking, not discrete |
 
-**🎯 Navigation Tips for Levels 1 & 2:**
-- ↔️ **Left/Right Tilt**: Move to adjacent image
-- 🔄 **Return to Neutral**: Required between moves (dead zone: 0.3)
-- ⏱️ **Cooldown**: 500ms between moves (prevents rapid cycling)
-- ❄️ **Frozen Motion**: Normal during PUSH hold (5 seconds)
-
-**🎯 Navigation Tips for Level 3 (Circular):**
-- ↔️ **Left/Right Tilt**: Move to next/previous artwork (circular)
-- ⬆️⬇️ **Forward/Back Tilt**: Jump 3 artworks forward/backward
-- 🌀 **Circular**: Navigation wraps around (artwork 15 → artwork 1)
-- ❄️ **Frozen Motion**: Locks when excitement is building toward selection
+**🎯 Navigation Tips for All Levels:**
+- ↔️ **Pan Head Left/Right**: Smooth cursor-like control through images/artworks
+- 🎯 **Natural Movement**: Turn head naturally like looking around a room
+- ⏱️ **Continuous Tracking**: No need to return to neutral - cursor follows head position
+- ❄️ **Frozen Motion**: Normal during PUSH hold (Levels 1&2) or excitement build (Level 3)
 
 ---
 
