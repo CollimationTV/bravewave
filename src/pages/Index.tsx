@@ -10,6 +10,7 @@ import { MentalCommandEvent, MotionEvent, PerformanceMetricsEvent } from "@/lib/
 import { level1Images } from "@/data/imageData";
 import { Brain } from "lucide-react";
 import { Brain3D } from "@/components/Brain3D";
+import { FuturisticGrid } from "@/components/FuturisticGrid";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -64,8 +65,11 @@ const Index = () => {
 
   return (
     <div className="min-h-screen relative">
+      {/* Futuristic Grid Overlay */}
+      <FuturisticGrid className="z-0" />
+      
       {/* Animated Brain Background */}
-      <Brain3D excitement={averageExcitement} className="opacity-20 z-0" />
+      <Brain3D excitement={averageExcitement} className="opacity-30 z-0" />
       
       <Header />
       <Hero />

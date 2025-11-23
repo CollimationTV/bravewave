@@ -135,3 +135,23 @@ All colors MUST be HSL.
     opacity: 0;
   }
 }
+
+@keyframes scan-line {
+  from {
+    top: 0%;
+  }
+  to {
+    top: 100%;
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
