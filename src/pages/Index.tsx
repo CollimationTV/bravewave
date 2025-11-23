@@ -8,6 +8,7 @@ import { Features } from "@/components/Features";
 import { MultiHeadsetConnection } from "@/components/MultiHeadsetConnection";
 import { MentalCommandEvent, MotionEvent } from "@/lib/multiHeadsetCortexClient";
 import { level1Images } from "@/data/imageData";
+import { Brain } from "lucide-react";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -65,15 +66,31 @@ const Index = () => {
         connectionStatus={connectionStatus}
       />
       
-      <PerHeadsetImageGrid
-        images={level1Images}
-        mentalCommand={mentalCommand}
-        motionEvent={motionEvent}
-        connectedHeadsets={connectedHeadsets}
-        onAllSelected={handleAllSelected}
-        title="Select Your Image - Level 1"
-        description="Each user selects one image using mind control"
-      />
+      {connectionStatus === 'ready' && connectedHeadsets.length > 0 ? (
+        <PerHeadsetImageGrid
+          images={level1Images}
+          mentalCommand={mentalCommand}
+          motionEvent={motionEvent}
+          connectedHeadsets={connectedHeadsets}
+          onAllSelected={handleAllSelected}
+          title="Select Your Image - Level 1"
+          description="Each user selects one image using mind control"
+        />
+      ) : (
+        <section className="py-12 px-6">
+          <div className="container mx-auto max-w-2xl text-center">
+            <div className="p-8 rounded-lg border border-border/50 bg-card/30 backdrop-blur-sm">
+              <Brain className="w-16 h-16 mx-auto mb-4 text-primary/60" />
+              <h3 className="text-2xl font-bold mb-2">Connect Your Headset</h3>
+              <p className="text-muted-foreground">
+                {connectionStatus === 'connecting'
+                  ? 'Authenticating with Emotiv Cortex...' 
+                  : 'Connect your Emotiv headset above to begin the BraveWave experience'}
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
       
       <Features />
       
