@@ -26,25 +26,40 @@ const ExcitementLevel1 = () => {
 
   const SELECTION_HOLD_DURATION = 5000; // 5 seconds
 
+  // Track if any headset is actively pushing
+  const [isPushHoldActive, setIsPushHoldActive] = useState(false);
+
   // Cursor movement from gyration data
   useEffect(() => {
-    if (!motion) return;
+    if (!motion || isPushHoldActive) return; // Freeze during PUSH hold
     
     const event = motion as MotionEvent;
-    const MOVEMENT_SPEED = 0.0002;
-    const DEAD_ZONE = 0.05;
-    const MAX_STEP = 0.01;
+    const MOVEMENT_SPEED = 0.001; // Increased sensitivity
+    const DEAD_ZONE = 0.03; // Reduced dead zone
+    const MAX_STEP = 0.015; // Increased max step
     
+    let deltaX = 0;
+    let deltaY = 0;
+    
+    // Left/Right movement (gyroY - yaw)
     if (Math.abs(event.gyroY) > DEAD_ZONE) {
-      const delta = event.gyroY * MOVEMENT_SPEED;
-      const clampedDelta = Math.max(-MAX_STEP, Math.min(MAX_STEP, delta));
-      
+      deltaX = event.gyroY * MOVEMENT_SPEED;
+      deltaX = Math.max(-MAX_STEP, Math.min(MAX_STEP, deltaX));
+    }
+    
+    // Up/Down movement (gyroX - pitch/tilt)
+    if (Math.abs(event.gyroX) > DEAD_ZONE) {
+      deltaY = -event.gyroX * MOVEMENT_SPEED; // Negative for natural tilt
+      deltaY = Math.max(-MAX_STEP, Math.min(MAX_STEP, deltaY));
+    }
+    
+    if (deltaX !== 0 || deltaY !== 0) {
       setCursorPosition(prev => ({
-        x: Math.max(0, Math.min(1, prev.x + clampedDelta)),
-        y: prev.y
+        x: Math.max(0, Math.min(1, prev.x + deltaX)),
+        y: Math.max(0, Math.min(1, prev.y + deltaY))
       }));
     }
-  }, [motion]);
+  }, [motion, isPushHoldActive]);
 
   // Determine focused image based on cursor position
   useEffect(() => {
@@ -59,6 +74,28 @@ const ExcitementLevel1 = () => {
     setFocusedImageId(excitementLevel1Images[index]?.id || null);
   }, [cursorPosition]);
 
+  // Monitor PUSH commands and freeze cursor during hold
+  useEffect(() => {
+    if (!performanceMetrics?.com) return;
+
+    const headsetId = performanceMetrics.headsetId || "default";
+    const commands = performanceMetrics.com || [];
+    const pushCommand = commands.find((cmd: any) => cmd === "push");
+    
+    // Activate freeze if any headset is pushing
+    if (pushCommand) {
+      setIsPushHoldActive(true);
+    } else {
+      setIsPushHoldActive(false);
+      // Reset hold timer when PUSH is released
+      setSelectionHoldStart(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(headsetId);
+        return newMap;
+      });
+    }
+  }, [performanceMetrics]);
+
   // Monitor excitement levels from performance metrics
   useEffect(() => {
     if (!performanceMetrics?.met) return;
@@ -72,11 +109,11 @@ const ExcitementLevel1 = () => {
       return newLevels;
     });
 
-    // Check if excitement exceeds threshold for focused image (auto-selection)
-    if (focusedImageId !== null) {
+    // Check if PUSH command is active for focused image selection
+    if (focusedImageId !== null && isPushHoldActive) {
       const image = excitementLevel1Images.find(img => img.id === focusedImageId);
-      if (image && excitementValue >= image.excitementThreshold) {
-        // Start or continue hold timer
+      if (image) {
+        // Start or continue hold timer during PUSH
         const now = Date.now();
         const holdStart = selectionHoldStart.get(headsetId);
         
@@ -89,17 +126,11 @@ const ExcitementLevel1 = () => {
             newMap.delete(headsetId);
             return newMap;
           });
+          setIsPushHoldActive(false);
         }
-      } else {
-        // Reset hold timer if excitement drops below threshold
-        setSelectionHoldStart(prev => {
-          const newMap = new Map(prev);
-          newMap.delete(headsetId);
-          return newMap;
-        });
       }
     }
-  }, [performanceMetrics, focusedImageId]);
+  }, [performanceMetrics, focusedImageId, isPushHoldActive]);
 
   const handleSelection = (headsetId: string, imageId: number) => {
     if (selections.has(headsetId)) return; // Already selected

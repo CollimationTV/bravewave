@@ -29,26 +29,49 @@ const ExcitementLevel2 = () => {
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const startTimeRef = useRef<number>(0);
+  const [isPushHoldActive, setIsPushHoldActive] = useState(false);
+
+  // Monitor PUSH commands to freeze cursor
+  useEffect(() => {
+    if (!performanceMetrics?.com) return;
+
+    const commands = performanceMetrics.com || [];
+    const pushCommand = commands.find((cmd: any) => cmd === "push");
+    
+    setIsPushHoldActive(!!pushCommand);
+  }, [performanceMetrics]);
 
   // Cursor movement from gyration data
   useEffect(() => {
-    if (!motion) return;
+    if (!motion || isPushHoldActive) return; // Freeze during PUSH
     
     const event = motion as MotionEvent;
-    const MOVEMENT_SPEED = 0.0002;
-    const DEAD_ZONE = 0.05;
-    const MAX_STEP = 0.01;
+    const MOVEMENT_SPEED = 0.001; // Increased sensitivity
+    const DEAD_ZONE = 0.03; // Reduced dead zone
+    const MAX_STEP = 0.015; // Increased max step
     
+    let deltaX = 0;
+    let deltaY = 0;
+    
+    // Left/Right movement (gyroY - yaw)
     if (Math.abs(event.gyroY) > DEAD_ZONE) {
-      const delta = event.gyroY * MOVEMENT_SPEED;
-      const clampedDelta = Math.max(-MAX_STEP, Math.min(MAX_STEP, delta));
-      
+      deltaX = event.gyroY * MOVEMENT_SPEED;
+      deltaX = Math.max(-MAX_STEP, Math.min(MAX_STEP, deltaX));
+    }
+    
+    // Up/Down movement (gyroX - pitch/tilt)
+    if (Math.abs(event.gyroX) > DEAD_ZONE) {
+      deltaY = -event.gyroX * MOVEMENT_SPEED; // Negative for natural tilt
+      deltaY = Math.max(-MAX_STEP, Math.min(MAX_STEP, deltaY));
+    }
+    
+    if (deltaX !== 0 || deltaY !== 0) {
       setCursorPosition(prev => ({
-        x: Math.max(0, Math.min(1, prev.x + clampedDelta)),
-        y: prev.y
+        x: Math.max(0, Math.min(1, prev.x + deltaX)),
+        y: Math.max(0, Math.min(1, prev.y + deltaY))
       }));
     }
-  }, [motion]);
+  }, [motion, isPushHoldActive]);
 
   // Determine focused song based on cursor position
   useEffect(() => {
