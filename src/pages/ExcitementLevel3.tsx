@@ -7,7 +7,7 @@ import { ArtworkTile } from "@/components/ArtworkTile";
 import { excitementLevel3Images } from "@/data/excitementImages";
 import { generateSphericalLayout } from "@/utils/sphericalLayout";
 import { getHeadsetColor } from "@/utils/headsetColors";
-import { PerformanceMetricsEvent } from "@/lib/multiHeadsetCortexClient";
+import { PerformanceMetricsEvent, MotionEvent } from "@/lib/multiHeadsetCortexClient";
 
 const ExcitementLevel3 = () => {
   const location = useLocation();
@@ -15,23 +15,102 @@ const ExcitementLevel3 = () => {
   const { metadata, videoJobId, connectedHeadsets } = location.state || {};
   
   const [performanceMetrics, setPerformanceMetrics] = useState<PerformanceMetricsEvent | null>(null);
+  const [motionEvent, setMotionEvent] = useState<MotionEvent | null>(null);
   const [excitementLevels, setExcitementLevels] = useState<Map<string, number>>(new Map());
   const [selections, setSelections] = useState<Map<string, number>>(new Map());
   const [excitementDuration, setExcitementDuration] = useState<Map<string, { imageId: number; startTime: number; excitement: number }>>(new Map());
   const [focusedImages, setFocusedImages] = useState<Map<string, number>>(new Map()); // headsetId -> imageId
+  const [neutralState, setNeutralState] = useState<Map<string, boolean>>(new Map());
+  const [moveCooldown, setMoveCooldown] = useState<Map<string, number>>(new Map());
   
   const positions = generateSphericalLayout();
   
   // Calculate average excitement across all headsets
   const averageExcitement = Array.from(excitementLevels.values()).reduce((sum, val) => sum + val, 0) / Math.max(excitementLevels.size, 1);
   
-  // Listen to performance metrics from parent state
+  // Listen to performance metrics and motion events from parent state
   useEffect(() => {
     const metrics = location.state?.performanceMetrics;
-    if (metrics) {
-      setPerformanceMetrics(metrics);
-    }
+    const motion = location.state?.motionEvent;
+    if (metrics) setPerformanceMetrics(metrics);
+    if (motion) setMotionEvent(motion);
   }, [location.state]);
+  
+  // Initialize focused images to center artwork (index 0)
+  useEffect(() => {
+    if (connectedHeadsets && connectedHeadsets.length > 0 && focusedImages.size === 0) {
+      const initialFocus = new Map();
+      connectedHeadsets.forEach((headsetId: string) => {
+        initialFocus.set(headsetId, excitementLevel3Images[0].id);
+      });
+      setFocusedImages(initialFocus);
+    }
+  }, [connectedHeadsets, focusedImages.size]);
+  
+  // Handle head motion for navigation between artworks
+  useEffect(() => {
+    if (!motionEvent) return;
+    const { gyroX, gyroY, headsetId } = motionEvent;
+    
+    // Skip if already selected
+    if (selections.has(headsetId)) return;
+    
+    // Skip if excitement hold is active (frozen during selection)
+    if (excitementDuration.has(headsetId)) {
+      return;
+    }
+    
+    // Check cooldown
+    const cooldownTime = moveCooldown.get(headsetId) || 0;
+    const now = Date.now();
+    if (now - cooldownTime < 500) { // 500ms cooldown
+      return;
+    }
+    
+    // Higher thresholds for intentional movement
+    const NEUTRAL_ZONE = 0.3;
+    const TILT_THRESHOLD = 0.7;
+    
+    const isInNeutral = Math.abs(gyroX) < NEUTRAL_ZONE && Math.abs(gyroY) < NEUTRAL_ZONE;
+    const wasInNeutral = neutralState.get(headsetId) ?? true;
+    
+    if (!wasInNeutral && isInNeutral) {
+      setNeutralState(prev => new Map(prev).set(headsetId, true));
+    }
+    
+    if (wasInNeutral && !isInNeutral) {
+      const currentFocusedId = focusedImages.get(headsetId) || excitementLevel3Images[0].id;
+      const currentIndex = excitementLevel3Images.findIndex(img => img.id === currentFocusedId);
+      
+      let newIndex = currentIndex;
+      
+      // Navigate based on tilt direction (circular navigation)
+      if (Math.abs(gyroY) > TILT_THRESHOLD) {
+        if (gyroY > 0) {
+          // Right tilt - next artwork
+          newIndex = (currentIndex + 1) % excitementLevel3Images.length;
+        } else {
+          // Left tilt - previous artwork
+          newIndex = (currentIndex - 1 + excitementLevel3Images.length) % excitementLevel3Images.length;
+        }
+      } else if (Math.abs(gyroX) > TILT_THRESHOLD) {
+        if (gyroX > 0) {
+          // Forward tilt - jump forward
+          newIndex = (currentIndex + 3) % excitementLevel3Images.length;
+        } else {
+          // Backward tilt - jump backward
+          newIndex = (currentIndex - 3 + excitementLevel3Images.length) % excitementLevel3Images.length;
+        }
+      }
+      
+      if (newIndex !== currentIndex) {
+        console.log(`🎯 Headset ${headsetId} navigated to artwork ${newIndex}`);
+        setFocusedImages(prev => new Map(prev).set(headsetId, excitementLevel3Images[newIndex].id));
+        setNeutralState(prev => new Map(prev).set(headsetId, false));
+        setMoveCooldown(prev => new Map(prev).set(headsetId, now));
+      }
+    }
+  }, [motionEvent, focusedImages, selections, excitementDuration, neutralState, moveCooldown]);
   
   // Handle performance metrics for excitement-based selection
   useEffect(() => {
@@ -45,8 +124,8 @@ const ExcitementLevel3 = () => {
     // Skip if already selected
     if (selections.has(headsetId)) return;
     
-    // Get focused image (for now, use center image by default - can be enhanced with motion)
-    const focusedImageId = focusedImages.get(headsetId) || excitementLevel3Images[0].id;
+    // Get focused image from state
+    const focusedImageId = focusedImages.get(headsetId);
     const focusedImage = excitementLevel3Images.find(img => img.id === focusedImageId);
     
     if (!focusedImage) return;
@@ -69,8 +148,8 @@ const ExcitementLevel3 = () => {
           excitement: excitement
         }));
         
-        // Check if 3 seconds have passed
-        if (Date.now() - duration.startTime >= 3000) {
+        // Check if 5 seconds have passed (increased from 3s for lower sensitivity)
+        if (Date.now() - duration.startTime >= 5000) {
           // AUTO-SELECT!
           console.log(`✨ Headset ${headsetId} selected artwork ${focusedImage.id} via excitement!`);
           setSelections(prev => new Map(prev).set(headsetId, focusedImage.id));
@@ -89,7 +168,7 @@ const ExcitementLevel3 = () => {
         return newMap;
       });
     }
-  }, [performanceMetrics, focusedImages, selections, excitementDuration]);
+  }, [performanceMetrics, focusedImages, selections, excitementDuration, excitementLevel3Images]);
   
   // Check if all selections complete
   useEffect(() => {
@@ -169,7 +248,8 @@ const ExcitementLevel3 = () => {
               const position = positions[index];
               const focusedByHeadsets = Array.from(focusedImages.entries())
                 .filter(([_, imgId]) => imgId === image.id)
-                .map(([headsetId]) => headsetId);
+                .map(([headsetId]) => headsetId)
+                .filter(hId => !selections.has(hId)); // Exclude headsets that already selected
               
               const focusColors = focusedByHeadsets.map(hId => getHeadsetColor(hId));
               const isFocusedByAny = focusColors.length > 0;
@@ -182,7 +262,7 @@ const ExcitementLevel3 = () => {
                   const duration = excitementDuration.get(headsetId);
                   if (duration && duration.imageId === image.id) {
                     const elapsed = Date.now() - duration.startTime;
-                    maxExcitementProgress = Math.max(maxExcitementProgress, Math.min(elapsed / 3000, 1) * image.excitementThreshold);
+                    maxExcitementProgress = Math.max(maxExcitementProgress, Math.min(elapsed / 5000, 1) * image.excitementThreshold);
                   }
                 }
               });
