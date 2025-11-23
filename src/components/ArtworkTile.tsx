@@ -107,7 +107,7 @@ export const ArtworkTile = ({
                   textShadow: '0 0 20px currentColor'
                 }}
               >
-                {Math.ceil((1 - excitementProgress / threshold) * 3)}
+                {Math.ceil((1 - excitementProgress / threshold) * 5)}
               </div>
             </div>
           )}

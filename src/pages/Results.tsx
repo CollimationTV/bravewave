@@ -59,7 +59,8 @@ const Results = () => {
           metadata,
           videoJobId,
           connectedHeadsets,
-          performanceMetrics: location.state?.performanceMetrics
+          performanceMetrics: location.state?.performanceMetrics,
+          motionEvent: location.state?.motionEvent
         },
         replace: true 
       });
