@@ -162,7 +162,7 @@ export class MultiHeadsetCortexClient {
       const [q0, q1, q2, q3, accX, accY, accZ] = message.mot;
       
       // Convert quaternion to Euler angles for easier interpretation
-      // Focus on Y-axis rotation (yaw) for left/right head turning
+      // Focus on Y-axis rotation for left/right head turning
       const gyroY = 2 * (q0 * q2 + q1 * q3);
       
       const event: MotionEvent = {
