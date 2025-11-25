@@ -33,8 +33,13 @@ const ExcitementLevel2 = () => {
   // Gyro calibration per headset
   const gyroRanges = useRef<Map<string, { min: number; max: number }>>(new Map());
   const pushStartTimes = useRef<Map<string, number>>(new Map());
+  
+  // Smoothed gyro values with exponential moving average
+  const smoothedGyro = useRef<Map<string, number>>(new Map());
+  const SMOOTHING_FACTOR = 0.15; // Lower = more smoothing (0.1-0.3 recommended)
+  const DEAD_ZONE = 0.08; // Minimum change required to update focus
 
-  // Gyro-based cursor navigation
+  // Gyro-based cursor navigation with smoothing
   useEffect(() => {
     if (!motionEvent) return;
     
@@ -50,24 +55,39 @@ const ExcitementLevel2 = () => {
     currentRange.max = Math.max(currentRange.max, event.gyroY);
     gyroRanges.current.set(headsetId, currentRange);
     
-    // Normalize gyroY to 0-1 range with smoothing
+    // Normalize gyroY to 0-1 range
     const range = currentRange.max - currentRange.min;
-    const normalized = range > 0.1 
+    const rawNormalized = range > 0.1 
       ? Math.max(0, Math.min(1, (event.gyroY - currentRange.min) / range))
       : 0.5;
     
-    // Map to image index (0-8 for 3x3 grid)
-    const imageIndex = Math.floor(normalized * excitementLevel2Images.length);
+    // Apply exponential moving average for smoothing
+    const prevSmoothed = smoothedGyro.current.get(headsetId) ?? rawNormalized;
+    const newSmoothed = prevSmoothed + SMOOTHING_FACTOR * (rawNormalized - prevSmoothed);
+    smoothedGyro.current.set(headsetId, newSmoothed);
+    
+    // Map to image index with dead zone
+    const imageIndex = Math.floor(newSmoothed * excitementLevel2Images.length);
     const clampedIndex = Math.max(0, Math.min(excitementLevel2Images.length - 1, imageIndex));
     const imageId = excitementLevel2Images[clampedIndex].id;
     
-    // Update focused image
-    setFocusedImages(prev => {
-      const updated = new Map(prev);
-      updated.set(headsetId, imageId);
-      return updated;
-    });
-  }, [motionEvent, selections]);
+    // Only update if focus changed (prevents jitter)
+    const currentFocus = focusedImages.get(headsetId);
+    if (currentFocus !== imageId) {
+      // Check if the change is significant enough
+      const currentIndex = excitementLevel2Images.findIndex(img => img.id === currentFocus);
+      const indexDiff = Math.abs(clampedIndex - currentIndex);
+      
+      // Allow update if it's a new headset or the change is beyond dead zone
+      if (currentFocus === undefined || indexDiff >= 1) {
+        setFocusedImages(prev => {
+          const updated = new Map(prev);
+          updated.set(headsetId, imageId);
+          return updated;
+        });
+      }
+    }
+  }, [motionEvent, selections, focusedImages]);
 
   // Handle PUSH command for selections
   useEffect(() => {
