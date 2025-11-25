@@ -35,18 +35,24 @@ const AudioEmotion = () => {
   // Calculate average excitement for brain visualization
   const averageExcitement = Array.from(excitementLevels.values()).reduce((sum, val) => sum + val, 0) / Math.max(excitementLevels.size, 1);
 
-  // Listen to performance metrics from parent state
+  // Listen to real-time performance metrics via window events
   useEffect(() => {
-    const metrics = location.state?.performanceMetrics;
-    if (metrics) setPerformanceMetrics(metrics);
-  }, [location.state]);
-
-  // Update excitement levels from performance metrics
-  useEffect(() => {
-    if (!performanceMetrics) return;
-    const { excitement, headsetId } = performanceMetrics;
-    setExcitementLevels(prev => new Map(prev).set(headsetId, excitement));
-  }, [performanceMetrics]);
+    const handlePerformanceMetrics = ((event: CustomEvent<PerformanceMetricsEvent>) => {
+      console.log('📊 AudioEmotion received performance metrics event:', event.detail);
+      setPerformanceMetrics(event.detail);
+      
+      // Immediately update excitement levels
+      const { excitement, headsetId } = event.detail;
+      setExcitementLevels(prev => new Map(prev).set(headsetId, excitement));
+    }) as EventListener;
+    
+    window.addEventListener('performance-metrics', handlePerformanceMetrics);
+    console.log('✅ AudioEmotion event listener registered');
+    
+    return () => {
+      window.removeEventListener('performance-metrics', handlePerformanceMetrics);
+    };
+  }, []);
 
   // Record excitement scores while audio is playing
   useEffect(() => {
