@@ -44,13 +44,11 @@ export const PerHeadsetImageGrid = ({
   const [smoothedPitch, setSmoothedPitch] = useState<Map<string, number>>(new Map());
   const [lastMotionUpdate, setLastMotionUpdate] = useState<Map<string, number>>(new Map());
 
-  // Continuous cursor position used by current motion effect (0-1 range per headset)
-  const [cursorPosition, setCursorPosition] = useState<Map<string, number>>(new Map());
-
-  // Motion / selection sensitivity constants
-  const CURSOR_MOVEMENT_SPEED = 0.01; // much higher than 0.00005 so rotation is visible
-  const CURSOR_DEAD_ZONE = 0.05; // smaller dead zone so moderate head turns register
-  const CURSOR_MAX_STEP = 0.15; // allow noticeable jumps but still clamp extremes
+  // Direct 3x3 grid mapping constants
+  const ROTATION_THRESHOLD = 12; // degrees (turn head left/right beyond this to move columns)
+  const PITCH_THRESHOLD = 8;    // degrees (tilt head up/down beyond this to move rows)
+  const MOTION_UPDATE_INTERVAL = 100; // ms between cursor updates (10Hz)
+  const SMOOTHING_FACTOR = 0.5; // 0-1, higher = more smooth but slower response
   const PUSH_POWER_THRESHOLD = 0.3; // Moderate PUSH sensitivity
   const PUSH_HOLD_TIME_MS = 4000; // 4 seconds hold time
   const AUTO_CYCLE_INTERVAL_MS = 6000; // 6 seconds between image advances
@@ -76,69 +74,100 @@ export const PerHeadsetImageGrid = ({
     setHeadsetSelections(newSelections);
   }, [connectedHeadsets, headsetSelections]);
 
-  // Handle head turning for smooth cursor-like navigation
+  // Handle head motion with direct 3x3 grid mapping
   useEffect(() => {
     if (!motionEvent) {
       console.log('⚠️ No motion event received');
       return;
     }
-    const { rotation, headsetId } = motionEvent;
     
-    console.log(`🎮 Motion: headset=${headsetId.substring(0,8)}, rotation=${rotation.toFixed(2)}°`);
+    const { rotation, pitch, headsetId } = motionEvent;
+    const now = Date.now();
+    
+    // Throttle updates to 10Hz for smoother feel
+    const lastUpdate = lastMotionUpdate.get(headsetId) || 0;
+    if (now - lastUpdate < MOTION_UPDATE_INTERVAL) {
+      return;
+    }
+    setLastMotionUpdate(prev => new Map(prev).set(headsetId, now));
+    
+    console.log(`🎮 MOTION: headset=${headsetId.substring(0,8)}, rotation=${rotation.toFixed(2)}°, pitch=${pitch.toFixed(2)}°`);
     
     const currentSelection = headsetSelections.get(headsetId);
     if (!currentSelection || currentSelection.imageId !== null) return;
 
-    // FREEZE navigation if this headset is actively pushing/holding selection
+    // FREEZE navigation if this headset is actively pushing
     if (pushProgress.has(headsetId)) {
       console.log(`🚫 Motion frozen - PUSH active for ${headsetId.substring(0,8)}`);
       return;
     }
 
-    // Get current cursor position (0-1 normalized)
-    const currentPosition = cursorPosition.get(headsetId) ?? 0.0;
+    // Apply exponential smoothing to reduce jitter and make movement fluid
+    const prevRotation = smoothedRotation.get(headsetId) || 0;
+    const prevPitch = smoothedPitch.get(headsetId) || 0;
     
-    // Normalize rotation (-180 to +180) to movement delta
-    const rotationNormalized = rotation / 180; // -1 to +1
+    const newRotation = prevRotation * SMOOTHING_FACTOR + rotation * (1 - SMOOTHING_FACTOR);
+    const newPitch = prevPitch * SMOOTHING_FACTOR + pitch * (1 - SMOOTHING_FACTOR);
     
-    console.log(`📍 Current position: ${currentPosition.toFixed(3)}, rotation: ${rotation.toFixed(2)}°, normalized: ${rotationNormalized.toFixed(3)}`);
+    setSmoothedRotation(prev => new Map(prev).set(headsetId, newRotation));
+    setSmoothedPitch(prev => new Map(prev).set(headsetId, newPitch));
     
-    // Only update if movement exceeds dead zone
-    if (Math.abs(rotationNormalized) < CURSOR_DEAD_ZONE) {
-      console.log(`💤 rotation ${rotationNormalized.toFixed(4)} below dead zone ${CURSOR_DEAD_ZONE}`);
-      return;
+    console.log(`📊 Smoothed: rotation=${newRotation.toFixed(2)}°, pitch=${newPitch.toFixed(2)}°`);
+    
+    // Map rotation and pitch to 3x3 grid (0-8)
+    // Grid layout:
+    // 0 1 2  (top row - head tilted UP)
+    // 3 4 5  (middle row - head level)
+    // 6 7 8  (bottom row - head tilted DOWN)
+    //
+    // Columns: left (head turned LEFT), center, right (head turned RIGHT)
+    
+    let column = 1; // default center
+    if (newRotation < -ROTATION_THRESHOLD) {
+      column = 0; // head turned LEFT → left column
+      console.log(`👈 HEAD LEFT: rotation=${newRotation.toFixed(2)}° → column 0`);
+    } else if (newRotation > ROTATION_THRESHOLD) {
+      column = 2; // head turned RIGHT → right column
+      console.log(`👉 HEAD RIGHT: rotation=${newRotation.toFixed(2)}° → column 2`);
     }
     
-    // Calculate delta and clamp to prevent large jumps
-    const rawDelta = rotationNormalized * CURSOR_MOVEMENT_SPEED;
-    const clampedDelta = Math.max(-CURSOR_MAX_STEP, Math.min(CURSOR_MAX_STEP, rawDelta));
+    let row = 1; // default middle
+    if (newPitch > PITCH_THRESHOLD) {
+      row = 0; // head tilted UP → top row
+      console.log(`👆 HEAD UP: pitch=${newPitch.toFixed(2)}° → row 0`);
+    } else if (newPitch < -PITCH_THRESHOLD) {
+      row = 2; // head tilted DOWN → bottom row
+      console.log(`👇 HEAD DOWN: pitch=${newPitch.toFixed(2)}° → row 2`);
+    }
     
-    // Calculate new position based on head pan (rotation)
-    // Positive rotation = head turned right = cursor moves right
-    // Negative rotation = head turned left = cursor moves left
-    let newPosition = currentPosition + clampedDelta;
+    // Calculate grid index (0-8)
+    const gridIndex = row * 3 + column;
     
-    // Clamp position to 0-1 range with wrapping (circular navigation)
-    if (newPosition >= 1) newPosition = newPosition - 1;
-    if (newPosition < 0) newPosition = 1 + newPosition;
-    
-    // Update cursor position
-    setCursorPosition(prev => new Map(prev).set(headsetId, newPosition));
-    
-    // Map cursor position to image index (0-1 -> 0-8 for 9 images)
-    const imageIndex = Math.floor(newPosition * images.length);
+    console.log(`🎯 Grid position: row=${row}, col=${column} → index=${gridIndex}`);
     
     // Update focused image if changed
-    if (imageIndex !== currentSelection.focusedIndex) {
-      console.log(`🎯 Headset ${headsetId} cursor moved to image ${imageIndex} (position: ${newPosition.toFixed(3)})`);
+    if (gridIndex !== currentSelection.focusedIndex && gridIndex >= 0 && gridIndex < images.length) {
+      console.log(`✅ Headset ${headsetId.substring(0,8)} moved to image ${gridIndex}`);
       const newSelections = new Map(headsetSelections);
       newSelections.set(headsetId, {
         ...currentSelection,
-        focusedIndex: imageIndex
+        focusedIndex: gridIndex
       });
       setHeadsetSelections(newSelections);
     }
-  }, [motionEvent, images.length, headsetSelections, pushProgress, cursorPosition]);
+  }, [
+    motionEvent, 
+    images.length, 
+    headsetSelections, 
+    pushProgress, 
+    smoothedRotation, 
+    smoothedPitch,
+    lastMotionUpdate,
+    ROTATION_THRESHOLD,
+    PITCH_THRESHOLD,
+    MOTION_UPDATE_INTERVAL,
+    SMOOTHING_FACTOR
+  ]);
   
   // Auto-cycle focused image for each headset at a slow, constant pace
   useEffect(() => {
