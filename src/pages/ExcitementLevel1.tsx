@@ -72,6 +72,8 @@ const ExcitementLevel1 = () => {
       const clampedX = Math.max(0, Math.min(100, cursorX));
       const clampedY = Math.max(0, Math.min(100, cursorY));
       
+      console.log(`📍 Cursor [${headsetId.slice(-4)}]: pos=(${clampedX.toFixed(1)}, ${clampedY.toFixed(1)}) | pitch=${scaledPitch.toFixed(1)} rot=${scaledRotation.toFixed(1)}`);
+      
       setCursorPositions(prev => new Map(prev).set(headsetId, { x: clampedX, y: clampedY }));
       
       // Check which image the cursor is hovering over

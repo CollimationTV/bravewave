@@ -72,6 +72,8 @@ const ExcitementLevel2 = () => {
       const clampedX = Math.max(0, Math.min(100, cursorX));
       const clampedY = Math.max(0, Math.min(100, cursorY));
       
+      console.log(`📍 Cursor [${headsetId.slice(-4)}]: pos=(${clampedX.toFixed(1)}, ${clampedY.toFixed(1)}) | pitch=${scaledPitch.toFixed(1)} rot=${scaledRotation.toFixed(1)}`);
+      
       setCursorPositions(prev => new Map(prev).set(headsetId, { x: clampedX, y: clampedY }));
       
       let hoveredImageId: number | undefined;
