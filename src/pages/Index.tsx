@@ -23,24 +23,19 @@ const Index = () => {
 
   const handleMentalCommand = (command: MentalCommandEvent) => {
     setMentalCommand(command);
-    window.dispatchEvent(new CustomEvent('mental-command', { detail: command }));
   };
 
   const handleMotion = (motion: MotionEvent) => {
     console.log(`🎮 Index received motion: headset=${motion.headsetId.substring(0,8)}, pitch=${motion.pitch.toFixed(2)}°, rotation=${motion.rotation.toFixed(2)}°`);
     setMotionEvent(motion);
-    window.dispatchEvent(new CustomEvent('motion-event', { detail: motion }));
   };
   
   const handlePerformanceMetrics = (metrics: PerformanceMetricsEvent) => {
     console.log(`📊 Index handlePerformanceMetrics called:`, {
       headsetId: metrics.headsetId,
-      excitement: metrics.excitement,
-      dispatching: 'window event'
+      excitement: metrics.excitement
     });
     setExcitementLevels(prev => new Map(prev).set(metrics.headsetId, metrics.excitement));
-    window.dispatchEvent(new CustomEvent('performance-metrics', { detail: metrics }));
-    console.log('✅ Window event dispatched for performance-metrics');
   };
 
   const handleHeadsetsChange = (headsetIds: string[]) => {
