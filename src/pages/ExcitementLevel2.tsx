@@ -67,10 +67,38 @@ const ExcitementLevel2 = () => {
       const scaledPitch = applySensitivityCurve(smoothPitch, 1.0, 3.0, 20, 15);
       const scaledRotation = applySensitivityCurve(smoothRotation, 1.0, 3.0, 20, 15);
       
-      const cursorX = 50 + (scaledRotation * SENSITIVITY);
-      const cursorY = 50 + (scaledPitch * SENSITIVITY);
-      const clampedX = Math.max(0, Math.min(100, cursorX));
-      const clampedY = Math.max(0, Math.min(100, cursorY));
+      // Convert to approximate viewport position
+      const viewportCursorX = 50 + (scaledRotation * SENSITIVITY);
+      const viewportCursorY = 50 + (scaledPitch * SENSITIVITY);
+      const rawClampedX = Math.max(0, Math.min(100, viewportCursorX));
+      const rawClampedY = Math.max(0, Math.min(100, viewportCursorY));
+
+      // Convert to screen pixels
+      let cursorScreenX = (rawClampedX / 100) * window.innerWidth;
+      let cursorScreenY = (rawClampedY / 100) * window.innerHeight;
+
+      // 🔒 Constrain cursor to the 3x3 image grid bounding box
+      let minLeft = Infinity;
+      let maxRight = -Infinity;
+      let minTop = Infinity;
+      let maxBottom = -Infinity;
+
+      for (const element of imageRefs.current.values()) {
+        if (!element) continue;
+        const rect = element.getBoundingClientRect();
+        minLeft = Math.min(minLeft, rect.left);
+        maxRight = Math.max(maxRight, rect.right);
+        minTop = Math.min(minTop, rect.top);
+        maxBottom = Math.max(maxBottom, rect.bottom);
+      }
+
+      if (minLeft !== Infinity && maxRight !== -Infinity) {
+        cursorScreenX = Math.max(minLeft, Math.min(maxRight, cursorScreenX));
+        cursorScreenY = Math.max(minTop, Math.min(maxBottom, cursorScreenY));
+      }
+
+      const clampedX = (cursorScreenX / window.innerWidth) * 100;
+      const clampedY = (cursorScreenY / window.innerHeight) * 100;
       
       console.log(`📍 Cursor [${headsetId.slice(-4)}]: pos=(${clampedX.toFixed(1)}, ${clampedY.toFixed(1)}) | pitch=${scaledPitch.toFixed(1)} rot=${scaledRotation.toFixed(1)}`);
       
