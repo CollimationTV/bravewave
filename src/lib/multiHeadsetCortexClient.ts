@@ -183,7 +183,6 @@ export class MultiHeadsetCortexClient {
       };
       
       this.onMotion?.(event);
-      window.dispatchEvent(new CustomEvent('motion-event', { detail: event }));
     }
 
     // Handle performance metrics stream (excitement, engagement, etc.)
