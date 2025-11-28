@@ -41,11 +41,32 @@ const ExcitementLevel2 = () => {
   // ULTRA LOW-LATENCY: Direct cursor position storage (no React state for cursor updates)
   const cursorScreenPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
 
+  // DEBUG STATE
+  const [debugInfo, setDebugInfo] = useState<Map<string, any>>(new Map());
+  const lastMotionTime = useRef<Map<string, number>>(new Map());
+  const motionEventCount = useRef<Map<string, number>>(new Map());
+
   // ULTRA LOW-LATENCY: Process motion immediately with direct DOM updates
   useEffect(() => {
+    const handleRecalibrate = () => {
+      connectedHeadsets?.forEach((headsetId: string) => {
+        centerPitch.current.delete(headsetId);
+        centerRotation.current.delete(headsetId);
+      });
+    };
+    
+    window.addEventListener('recalibrate-center', handleRecalibrate);
+    
     const handleMotion = ((event: CustomEvent<MotionEvent>) => {
       const motionData = event.detail;
       const headsetId = motionData.headsetId;
+      
+      // DEBUG: Track timing
+      const now = performance.now();
+      const lastTime = lastMotionTime.current.get(headsetId) || now;
+      const deltaTime = now - lastTime;
+      lastMotionTime.current.set(headsetId, now);
+      motionEventCount.current.set(headsetId, (motionEventCount.current.get(headsetId) || 0) + 1);
       
       if (selections.has(headsetId)) return;
       if (isPushing.get(headsetId)) return;
@@ -65,7 +86,6 @@ const ExcitementLevel2 = () => {
       const relativeRotation = motionData.rotation - (centerRotation.current.get(headsetId) || 0);
       
       // IMMEDIATE filtering - use performance.now() for high precision
-      const now = performance.now();
       const smoothPitch = pitchFilters.current.get(headsetId)!.filter(relativePitch, now);
       const smoothRotation = rotationFilters.current.get(headsetId)!.filter(relativeRotation, now);
       
@@ -138,11 +158,32 @@ const ExcitementLevel2 = () => {
           return updated;
         });
       }
+
+      // DEBUG: Update debug info every 10 frames to avoid overwhelming React
+      if ((motionEventCount.current.get(headsetId) || 0) % 10 === 0) {
+        setDebugInfo(prev => new Map(prev).set(headsetId, {
+          rawPitch: motionData.pitch.toFixed(2),
+          rawRotation: motionData.rotation.toFixed(2),
+          relativePitch: relativePitch.toFixed(2),
+          relativeRotation: relativeRotation.toFixed(2),
+          smoothPitch: smoothPitch.toFixed(2),
+          smoothRotation: smoothRotation.toFixed(2),
+          cursorX: cursorScreenX.toFixed(0),
+          cursorY: cursorScreenY.toFixed(0),
+          focusedImage: hoveredImageId || 'none',
+          deltaTime: deltaTime.toFixed(1),
+          fps: (1000 / deltaTime).toFixed(1),
+          eventCount: motionEventCount.current.get(headsetId) || 0
+        }));
+      }
     }) as EventListener;
 
     window.addEventListener('motion-event', handleMotion);
-    return () => window.removeEventListener('motion-event', handleMotion);
-  }, [selections, isPushing, focusedImages]);
+    return () => {
+      window.removeEventListener('motion-event', handleMotion);
+      window.removeEventListener('recalibrate-center', handleRecalibrate);
+    };
+  }, [selections, isPushing, focusedImages, connectedHeadsets]);
 
   useEffect(() => {
     const handleMentalCommand = ((event: CustomEvent<MentalCommandEvent>) => {
@@ -210,12 +251,61 @@ const ExcitementLevel2 = () => {
     <div className="min-h-screen relative">
       <Brain3D excitement={0.5} className="opacity-20 z-0" />
       <Header />
+
+      {/* DEBUG HUD */}
+      {connectedHeadsets?.map((headsetId: string) => {
+        const info = debugInfo.get(headsetId);
+        if (!info) return null;
+        const color = getHeadsetColor(headsetId);
+        
+        return (
+          <div 
+            key={`debug-${headsetId}`}
+            className="fixed top-20 right-4 z-50 bg-black/90 text-white p-4 rounded-lg font-mono text-xs border-2"
+            style={{ borderColor: color, maxWidth: '300px' }}
+          >
+            <div className="font-bold mb-2" style={{ color }}>DEBUG: {headsetId}</div>
+            <div className="space-y-1">
+              <div className="grid grid-cols-2 gap-2">
+                <div>Raw Pitch:</div><div className="text-right">{info.rawPitch}°</div>
+                <div>Raw Rotation:</div><div className="text-right">{info.rawRotation}°</div>
+                <div>Rel Pitch:</div><div className="text-right text-cyan-400">{info.relativePitch}°</div>
+                <div>Rel Rotation:</div><div className="text-right text-cyan-400">{info.relativeRotation}°</div>
+                <div>Smooth Pitch:</div><div className="text-right text-green-400">{info.smoothPitch}°</div>
+                <div>Smooth Rot:</div><div className="text-right text-green-400">{info.smoothRotation}°</div>
+                <div className="col-span-2 border-t border-gray-700 my-1"></div>
+                <div>Cursor X:</div><div className="text-right text-yellow-400">{info.cursorX}px</div>
+                <div>Cursor Y:</div><div className="text-right text-yellow-400">{info.cursorY}px</div>
+                <div>Focused:</div><div className="text-right text-purple-400">#{info.focusedImage}</div>
+                <div className="col-span-2 border-t border-gray-700 my-1"></div>
+                <div>Delta Time:</div><div className="text-right">{info.deltaTime}ms</div>
+                <div>FPS:</div><div className="text-right text-green-400">{info.fps}</div>
+                <div>Events:</div><div className="text-right text-gray-400">{info.eventCount}</div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
       
       <div className="py-12 px-6">
         <div className="container mx-auto max-w-7xl">
           <div className="text-center mb-8">
             <div className="inline-flex items-center gap-3 mb-4">
               <Music className="h-12 w-12 text-primary animate-pulse" />
+              <button
+                onClick={() => {
+                  connectedHeadsets?.forEach((headsetId: string) => {
+                    const lastMotion = lastMotionTime.current.get(headsetId);
+                    if (lastMotion) {
+                      // Recalibrate center to current head position
+                      window.dispatchEvent(new CustomEvent('recalibrate-center'));
+                    }
+                  });
+                }}
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
+              >
+                📍 Recalibrate Center
+              </button>
             </div>
             <h1 className="text-4xl font-bold uppercase tracking-wider mb-4" style={{ fontFamily: 'Orbitron, sans-serif' }}>
               Level 2: Theme Selection
